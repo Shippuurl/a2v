@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -673,6 +674,19 @@ func newDoctorCmd() *cobra.Command {
 				line(false, "codex", err.Error())
 			} else {
 				line(true, "codex", bin)
+				if out, e := exec.Command(bin, "--version").Output(); e == nil {
+					ver := strings.TrimSpace(string(out))
+					caps := []string{}
+					if codex.Supports("resume") {
+						caps = append(caps, "resume")
+					}
+					if codex.Supports("--dangerously-bypass-approvals-and-sandbox") {
+						caps = append(caps, "新权限参数")
+					} else if codex.Supports("--dangerously-skip-permissions") {
+						caps = append(caps, "旧权限参数")
+					}
+					line(true, "codex 版本", ver+"（"+strings.Join(caps, " / ")+"；a2v 按能力自动适配）")
+				}
 			}
 
 			p := cfg.Proxy()
@@ -688,6 +702,17 @@ func newDoctorCmd() *cobra.Command {
 				} else {
 					line(code == 200, "代理连通性", fmt.Sprintf("GET /v1/models -> HTTP %d", code))
 				}
+			}
+
+			eff := codex.EffectiveFlags(cfg.Flags)
+			bad := codex.UnsupportedFlags(cfg.Flags)
+			switch {
+			case len(bad) > 0:
+				line(false, "codex 参数", "codex 不认: "+strings.Join(bad, " ")+"（改 config 的 flags）")
+			case eff != "" && eff != cfg.Flags:
+				line(true, "codex 参数", eff+"  ← 已从旧名自动转换")
+			case eff != "":
+				line(true, "codex 参数", eff)
 			}
 
 			line(len(cfg.Models) > 0, "模型目录", fmt.Sprintf("%d 个（含历史）", len(cfg.Models)))

@@ -125,6 +125,20 @@ codex -c model_provider="proxy" \
 环境变量：`OPENAI_API_KEY` / `CODEX_PROXY_API_KEY` / `FASTLLM_API_KEY` / `OPENAI_BASE_URL`。
 没有代理时直接 `codex --model ...`，走 `~/.codex/config.toml` 的默认 provider。
 
+### 兼容不同版本的 codex
+
+a2v 每次启动前读一遍 `codex --help`，按**当前装的那个 codex** 能认什么来选参数名：
+
+| 配置里写的 | 新 codex（0.16x+） | 老 codex |
+|---|---|---|
+| `--dangerously-skip-permissions` | 自动换成 `--dangerously-bypass-approvals-and-sandbox` | 原样传 |
+| `--dangerously-bypass-approvals-and-sandbox` | 原样传 | 自动退回 `--dangerously-skip-permissions` |
+
+同理处理 `--auto-approve` / `--full-auto`。如果老版本没有 `resume` 子命令，
+恢复会话会退化成开新会话，而不是报错。探测不到 codex 时（比如没装）
+参数原样传，不做猜测。`a2v doctor` 会显示 codex 版本、识别到的能力，
+以及最终生效的参数；完全不认的参数也会在那里报出来。
+
 ## 开发与发布
 
 ```bash

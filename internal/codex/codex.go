@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/Shippuurl/a2v/internal/config"
 )
@@ -59,9 +60,9 @@ func (s Spec) Args() []string {
 		)
 	}
 
-	a = append(a, splitFlags(s.Flags)...)
+	a = append(a, resolveFlags(splitFlags(s.Flags))...)
 
-	if s.ResumeID != "" {
+	if s.ResumeID != "" && Supports("resume") {
 		a = append(a, "resume", "--model", s.Model, s.ResumeID)
 	} else {
 		a = append(a, "--model", s.Model)
@@ -90,6 +91,111 @@ func (s Spec) Command() string {
 	parts := []string{"codex"}
 	parts = append(parts, s.Args()...)
 	return strings.Join(parts, " ")
+}
+
+// flagAliases groups spellings of the same switch across codex versions.
+// Older builds only know the left-hand names, newer ones dropped them in
+// favour of the right-hand ones.
+var flagAliases = [][]string{
+	{"--dangerously-skip-permissions", "--yolo", "--dangerously-bypass-approvals-and-sandbox"},
+	{"--auto-approve", "--full-auto"},
+	{"--ask-for-approval", "-a"},
+}
+
+// helpText is codex's own --help output, fetched at most once per process.
+var (
+	helpOnce sync.Once
+	helpBody string
+	helpLook func() string
+)
+
+// HelpText returns `codex --help`, or "" when codex cannot be inspected.
+func HelpText() string {
+	helpOnce.Do(func() {
+		helpBody = ""
+		look := helpLook
+		if look == nil {
+			look = func() string {
+				bin, err := Bin()
+				if err != nil {
+					return ""
+				}
+				out, err := exec.Command(bin, "--help").Output()
+				if err != nil {
+					return ""
+				}
+				return string(out)
+			}
+		}
+		helpBody = look()
+	})
+	return helpBody
+}
+
+// Supports reports whether the installed codex knows this flag or subcommand.
+func Supports(token string) bool {
+	help := HelpText()
+	if help == "" || token == "" {
+		return true // cannot tell: assume the user knows their build
+	}
+	re := regexp.MustCompile(regexp.QuoteMeta(token) + `($|[^\w-])`)
+	return re.MatchString(help)
+}
+
+// resolveFlags rewrites configured flags into the spelling this codex accepts.
+// Unknown flags are left untouched so codex can complain about them itself.
+func resolveFlags(in []string) []string {
+	if HelpText() == "" {
+		return in
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	for i, f := range out {
+		if !strings.HasPrefix(f, "-") || Supports(f) {
+			continue
+		}
+		for _, group := range flagAliases {
+			if !contains(group, f) {
+				continue
+			}
+			for _, alt := range group {
+				if Supports(alt) {
+					out[i] = alt
+					break
+				}
+			}
+		}
+	}
+	return out
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// EffectiveFlags renders the flag list a2v will actually pass.
+func EffectiveFlags(flags string) string {
+	return strings.Join(resolveFlags(splitFlags(flags)), " ")
+}
+
+// UnsupportedFlags returns configured flags that even the alias table cannot
+// map onto this codex build.
+func UnsupportedFlags(flags string) []string {
+	if HelpText() == "" {
+		return nil
+	}
+	var bad []string
+	for _, f := range resolveFlags(splitFlags(flags)) {
+		if strings.HasPrefix(f, "-") && !Supports(f) {
+			bad = append(bad, f)
+		}
+	}
+	return bad
 }
 
 // splitFlags splits a flag string on spaces while honouring quotes.
