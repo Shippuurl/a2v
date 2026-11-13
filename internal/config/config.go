@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 const Version = 1
@@ -37,6 +38,12 @@ type Proxy struct {
 	URL  string `json:"url"`
 	Key  string `json:"key,omitempty"`
 	Auth string `json:"auth,omitempty"`
+
+	// Models is the catalogue this relay's key is actually authorised for.
+	// It is what the menu shows; entries outside it are history and stay
+	// hidden unless the user asks for them.
+	Models   []Model `json:"models,omitempty"`
+	SyncedAt string  `json:"synced_at,omitempty"`
 }
 
 // Config is the global config file.
@@ -186,6 +193,26 @@ func (c *Config) ProxyByID(id string) *Proxy {
 	return nil
 }
 
+// SetModels records the catalogue the current key is authorised for.
+func (p *Proxy) SetModels(list []Model) {
+	p.Models = list
+	p.SyncedAt = time.Now().Format("2006-01-02 15:04")
+}
+
+// Authorised reports whether id is in this proxy's synced catalogue.
+// An empty catalogue means "never synced", so nothing is filtered out.
+func (p *Proxy) Authorised(id string) bool {
+	if len(p.Models) == 0 {
+		return true
+	}
+	for _, m := range p.Models {
+		if m.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // UseProxy switches the active proxy.
 func (c *Config) UseProxy(id string) error {
 	if c.ProxyByID(id) == nil {
@@ -323,6 +350,38 @@ func LocalPath(dir string) (string, *Local) {
 		dir = parent
 	}
 	return "", nil
+}
+
+// MergeHistory appends models never seen before to the history catalogue.
+func MergeHistory(old, fresh []Model) []Model {
+	seen := make(map[string]bool, len(old))
+	out := append([]Model{}, old...)
+	for _, m := range old {
+		seen[m.ID] = true
+	}
+	for _, m := range fresh {
+		if seen[m.ID] {
+			continue
+		}
+		seen[m.ID] = true
+		out = append(out, m)
+	}
+	return out
+}
+
+// PruneTo drops every catalogue entry not present in keep.
+func PruneTo(catalogue, keep []Model) []Model {
+	ok := make(map[string]bool, len(keep))
+	for _, m := range keep {
+		ok[m.ID] = true
+	}
+	out := catalogue[:0]
+	for _, m := range catalogue {
+		if ok[m.ID] {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // KeyFingerprint is a short, non-reversible tag for a key, used in diagnostics.

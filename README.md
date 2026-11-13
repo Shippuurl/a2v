@@ -2,6 +2,10 @@
 
 > a2vec 的命令行启动器。把 `codex`、多个中转代理、模型目录、会话恢复收进一个终端菜单。
 
+[![MIT](https://img.shields.io/badge/license-MIT-5eead4.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.24%2B-818cf8.svg)](go.mod)
+[![install](https://img.shields.io/badge/install-curl%20%7C%20bash-c084fc.svg)](https://tool.kervein.club/a2v/)
+
 ```
   ▲  a2v  a2vec · codex launcher
   ──────────────────────────────────────────────────────
@@ -22,6 +26,8 @@
 curl -fsSL https://tool.kervein.club/a2v/install.sh | bash
 ```
 
+源码：[github.com/Shippuurl/a2v](https://github.com/Shippuurl/a2v)
+
 Linux / macOS，amd64 / arm64。脚本只做三件事：认平台、下二进制、按 `sha256` 校验后放进 `PATH`（优先 `/usr/local/bin`，其次 `~/.local/bin`）。
 
 自更新：`a2v update`。指定目录：`... | bash -s -- --dir ~/bin`。
@@ -34,7 +40,7 @@ a2v sol                 # 用别名/模型 id 直接启动
 a2v run gpt-6-astra -- --full-auto   # 参数透传给 codex
 a2v proxy list          # 代理：list / use / add / rm
 a2v key sk-xxx          # 写 key，并同步 ~/.codex/auth.json
-a2v sync                # 从当前代理拉模型列表
+a2v sync                # 按当前 key 拉取授权模型（--prune 清理历史）
 a2v pin gpt-6-astra     # 当前目录固定模型（写 ./.a2v.json，- 清除）
 a2v sessions            # 最近会话
 a2v resume <session-id> # 用当前模型恢复会话
@@ -43,6 +49,18 @@ a2v update              # 自更新
 ```
 
 非交互环境（没有 TTY）自动退化成编号菜单，`echo 3 | a2v` 也能用。
+
+## 模型列表 = 当前 key 的授权列表
+
+`a2v sync` 拉到什么就显示什么：同步结果**按代理分别保存**（`proxies[].models` + `synced_at`），
+切代理时菜单跟着变，不会把 A 代理的模型混到 B 代理下面。
+
+历史模型不会丢，但默认折叠：
+
+- 默认只显示当前 key 授权的模型
+- 未授权的旧条目收进「历史」，按 `t` 展开，行尾标 `未授权`
+- `a2v sync --prune` 彻底删掉历史，只留授权列表
+- 从未同步过的代理（`models` 为空）不做过滤，按全量目录显示，并提示去 `sync`
 
 ## 界面
 
@@ -54,7 +72,8 @@ a2v update              # 自更新
 | `p` | 代理列表 / 新增 |
 | `ctrl+k` | 设置 API Key |
 | `r` | 恢复会话 |
-| `s` | 重新拉取模型 |
+| `s` | 重新拉取模型（按 key 授权） |
+| `t` | 展开 / 折叠未授权的历史模型 |
 | `?` | 帮助 |
 | `q` | 退出 |
 
@@ -114,4 +133,4 @@ bash deploy/push.sh                 # 上传 dist/ + install.sh + index.html 并
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 Shippuurl

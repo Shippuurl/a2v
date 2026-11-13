@@ -141,13 +141,20 @@ func (m *App) modelRow(i int, mo config.Model, w, aliasW int) string {
 	}
 	alias := m.cfg.AliasOf(mo.ID)
 	name := displayName(mo)
+	stale := !m.authorised[mo.ID]
 	nameStyle := lipgloss.NewStyle().Foreground(ink)
+	if stale {
+		nameStyle = lipgloss.NewStyle().Foreground(faint)
+	}
 	if selected {
 		nameStyle = nameStyle.Bold(true).Foreground(lipgloss.Color("#ffffff"))
 	}
 	desc := ""
 	if mo.Desc != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(mo.Desc)) {
 		desc = "  " + style(faint).Render(mo.Desc)
+	}
+	if stale {
+		desc += "  " + style(warn).Render("未授权")
 	}
 	if m.dupNames[name] {
 		short := mo.ID
@@ -307,7 +314,8 @@ func (m *App) viewHelp(w int) string {
 		{"p", "切换 / 添加中转代理"},
 		{"ctrl+k", "设置当前代理的 API Key"},
 		{"r", "恢复最近的 codex 会话"},
-		{"s", "从当前代理重新拉取模型列表"},
+		{"s", "从当前代理重新拉取模型列表（按 key 授权）"},
+		{"t", "显示 / 折叠未授权的历史模型"},
 		{"?", "打开 / 关闭这个帮助"},
 		{"q", "退出"},
 	}
@@ -342,6 +350,13 @@ func (m *App) footer(w int) string {
 	switch m.screen {
 	case scrModels:
 		parts = []string{hint("↑↓", "选择"), hint("⏎", "启动"), hint("/", "筛选"), hint("p", "代理"), hint("r", "会话"), hint("?", "帮助"), hint("q", "退出")}
+		if len(m.stale) > 0 {
+			label := fmt.Sprintf("历史 %d", len(m.stale))
+			if m.showStale {
+				label = "折叠历史"
+			}
+			parts = append([]string{hint("t", label)}, parts...)
+		}
 	case scrProxies:
 		parts = []string{hint("↑↓", "选择"), hint("⏎", "切换"), hint("a", "添加"), hint("esc", "返回")}
 	case scrSessions:
@@ -354,7 +369,16 @@ func (m *App) footer(w int) string {
 		parts = []string{hint("?", "关闭"), hint("q", "退出")}
 	}
 	sep := style(faint).Render(" · ")
-	return strings.Join(parts, sep) + style(faint).Render("   "+version.Version)
+	full := strings.Join(parts, sep)
+	ver := style(faint).Render("   " + version.Version)
+	if lipgloss.Width(full)+lipgloss.Width(ver) <= w {
+		return full + ver
+	}
+	for len(parts) > 1 && lipgloss.Width(full) > w {
+		parts = parts[:len(parts)-1]
+		full = strings.Join(parts, sep)
+	}
+	return full
 }
 
 func shortenPath(p string) string {

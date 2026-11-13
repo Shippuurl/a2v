@@ -86,6 +86,11 @@ type App struct {
 
 	dupNames map[string]bool
 	centered bool
+
+	base       []config.Model // what the menu is currently built from
+	authorised map[string]bool
+	stale      []config.Model // history the current key is not authorised for
+	showStale  bool
 }
 
 // New builds the app.
@@ -171,14 +176,21 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus("拉取模型失败: "+msg.err.Error(), true)
 			return m, nil
 		}
-		merged := mergeModels(msg.list, m.cfg.Models)
-		m.cfg.Models = merged
+		p := m.cfg.Proxy()
+		if p == nil {
+			m.setStatus(errNoProxy.Error(), true)
+			return m, nil
+		}
+		// The synced list becomes what this key is authorised for; anything
+		// else becomes history (kept, but folded away).
+		m.cfg.Models = config.MergeHistory(m.cfg.Models, msg.list)
+		p.SetModels(msg.list)
 		if err := m.cfg.Save(); err != nil {
 			m.setStatus("保存失败: "+err.Error(), true)
 			return m, nil
 		}
 		m.refresh()
-		m.setStatus(fmt.Sprintf("已同步 %d 个模型（新增 %d）", len(merged), len(msg.list)), false)
+		m.setStatus(fmt.Sprintf("%s 授权 %d 个模型（历史 %d 个已折叠）", p.Name, len(msg.list), len(m.stale)), false)
 		return m, nil
 
 	case sessionsMsg:
@@ -350,6 +362,19 @@ func (m *App) onModelsKey(s string) (tea.Model, tea.Cmd) {
 		m.searching = true
 		m.search.Focus()
 		return m, textinput.Blink
+	case "t":
+		if len(m.stale) == 0 {
+			m.setStatus("没有历史模型可显示", false)
+			return m, nil
+		}
+		m.showStale = !m.showStale
+		m.refresh()
+		if m.showStale {
+			m.setStatus(fmt.Sprintf("显示 %d 个历史模型（当前 key 未授权）", len(m.stale)), false)
+		} else {
+			m.setStatus(fmt.Sprintf("已折叠 %d 个未授权模型", len(m.stale)), false)
+		}
+		return m, nil
 	case "s":
 		m.loading = true
 		return m, tea.Batch(m.spin.Tick, syncModels(m.cfg.Proxy()))
@@ -573,7 +598,7 @@ func (m *App) clampOffset() {
 func (m *App) applyFilter() {
 	q := strings.ToLower(strings.TrimSpace(m.search.Value()))
 	m.filtered = m.filtered[:0]
-	for _, mo := range m.cfg.Models {
+	for _, mo := range m.base {
 		if q == "" || strings.Contains(strings.ToLower(mo.ID), q) ||
 			strings.Contains(strings.ToLower(mo.Name), q) ||
 			strings.Contains(strings.ToLower(mo.Desc), q) {
@@ -584,10 +609,41 @@ func (m *App) applyFilter() {
 	m.offset = 0
 }
 
+// refresh rebuilds the menu from what the active key is authorised for.
+// Models the key cannot use are kept as history and folded away by default.
 func (m *App) refresh() {
+	keep := ""
+	if m.cursor >= 0 && m.cursor < len(m.filtered) {
+		keep = m.filtered[m.cursor].ID
+	}
+
+	m.authorised = map[string]bool{}
+	m.stale = nil
+
+	var src []config.Model
+	if p := m.cfg.Proxy(); p != nil && len(p.Models) > 0 {
+		for _, mo := range p.Models {
+			m.authorised[mo.ID] = true
+		}
+		for _, mo := range m.cfg.Models {
+			if !m.authorised[mo.ID] {
+				m.stale = append(m.stale, mo)
+			}
+		}
+		src = append(src, p.Models...)
+		if m.showStale {
+			src = append(src, m.stale...)
+		}
+	} else {
+		src = append(src, m.cfg.Models...)
+		for _, mo := range src {
+			m.authorised[mo.ID] = true
+		}
+	}
+
 	m.dupNames = map[string]bool{}
 	count := map[string]int{}
-	for _, mo := range m.cfg.Models {
+	for _, mo := range src {
 		count[displayName(mo)]++
 	}
 	for name, n := range count {
@@ -595,6 +651,14 @@ func (m *App) refresh() {
 			m.dupNames[name] = true
 		}
 	}
-	m.filtered = append(m.filtered[:0], m.cfg.Models...)
+
+	m.base = src
 	m.applyFilter()
+	for i, mo := range m.filtered {
+		if mo.ID == keep {
+			m.cursor = i
+			break
+		}
+	}
+	m.clampOffset()
 }

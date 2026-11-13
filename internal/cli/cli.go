@@ -178,6 +178,7 @@ func newModelsCmd() *cobra.Command {
 					w = len(m.ID)
 				}
 			}
+			ap := cfg.Proxy()
 			for _, m := range cfg.Models {
 				row := fmt.Sprintf("  %-*s  %-10s", w, m.ID, m.Desc)
 				if a := cfg.AliasOf(m.ID); a != "" {
@@ -186,7 +187,17 @@ func newModelsCmd() *cobra.Command {
 				if m.ID == cfg.Model {
 					row += "  ← 当前"
 				}
+				if ap != nil && len(ap.Models) > 0 && !ap.Authorised(m.ID) {
+					row += "  (未授权)"
+				}
 				fmt.Println(row)
+			}
+			if ap != nil {
+				if len(ap.Models) > 0 {
+					fmt.Printf("\n当前代理 %s：授权 %d 个（同步于 %s）\n", ap.Name, len(ap.Models), ap.SyncedAt)
+				} else {
+					fmt.Printf("\n当前代理 %s：尚未同步，运行 a2v sync\n", ap.Name)
+				}
 			}
 			if aliases {
 				fmt.Println()
@@ -381,7 +392,8 @@ func newKeyCmd() *cobra.Command {
 // ---------------------------------------------------------------- sync
 
 func newSyncCmd() *cobra.Command {
-	return &cobra.Command{
+	var prune bool
+	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "从当前代理拉取模型列表",
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -400,33 +412,36 @@ func newSyncCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			seen := map[string]bool{}
-			var merged []config.Model
-			for _, m := range list {
-				if !seen[m.ID] {
-					seen[m.ID] = true
-					merged = append(merged, m)
-				}
+			p.SetModels(list)
+			before := len(cfg.Models)
+			cfg.Models = config.MergeHistory(cfg.Models, list)
+			fresh := len(cfg.Models) - before
+			if prune {
+				cfg.Models = config.PruneTo(cfg.Models, list)
 			}
-			added := len(merged)
-			for _, old := range cfg.Models {
-				if !seen[old.ID] {
-					seen[old.ID] = true
-					merged = append(merged, old)
-					added--
-				}
-			}
-			cfg.Models = merged
-			if cfg.Model == "" && len(merged) > 0 {
-				cfg.Model = merged[0].ID
+			if cfg.Model == "" && len(list) > 0 {
+				cfg.Model = list[0].ID
 			}
 			if err := cfg.Save(); err != nil {
 				return err
 			}
-			fmt.Printf("共 %d 个模型（新增 %d）\n", len(merged), maxInt(added, 0))
+			hidden := 0
+			for _, m := range cfg.Models {
+				if !p.Authorised(m.ID) {
+					hidden++
+				}
+			}
+			fmt.Printf("%s 的 key 授权 %d 个模型（新增 %d 个，未授权 %d 个）\n", p.Name, len(list), fresh, hidden)
+			if prune {
+				fmt.Println("已按授权列表清理历史目录")
+			} else if hidden > 0 {
+				fmt.Println("未授权的旧模型已折叠；a2v sync --prune 可彻底清掉")
+			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&prune, "prune", false, "按当前 key 的授权列表清理历史目录")
+	return cmd
 }
 
 func maxInt(a, b int) int {
@@ -572,7 +587,12 @@ func newDoctorCmd() *cobra.Command {
 				}
 			}
 
-			line(len(cfg.Models) > 0, "模型目录", fmt.Sprintf("%d 个", len(cfg.Models)))
+			line(len(cfg.Models) > 0, "模型目录", fmt.Sprintf("%d 个（含历史）", len(cfg.Models)))
+			if p != nil && len(p.Models) > 0 {
+				line(true, "key 授权", fmt.Sprintf("%d 个（同步于 %s）", len(p.Models), p.SyncedAt))
+			} else if p != nil {
+				line(false, "key 授权", "尚未同步，运行 a2v sync")
+			}
 
 			cwd, _ := os.Getwd()
 			if path, pin := config.LocalPath(cwd); pin != nil {

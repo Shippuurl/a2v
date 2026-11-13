@@ -30,25 +30,3 @@ func syncModels(p *config.Proxy) tea.Cmd {
 		return modelsMsg{list: list, err: err}
 	}
 }
-
-// mergeModels keeps entries the relay no longer advertises, so switching
-// proxies never empties the menu.
-func mergeModels(fresh, old []config.Model) []config.Model {
-	seen := make(map[string]bool, len(fresh))
-	out := make([]config.Model, 0, len(fresh)+len(old))
-	for _, m := range fresh {
-		if seen[m.ID] {
-			continue
-		}
-		seen[m.ID] = true
-		out = append(out, m)
-	}
-	for _, m := range old {
-		if seen[m.ID] {
-			continue
-		}
-		seen[m.ID] = true
-		out = append(out, m)
-	}
-	return out
-}
