@@ -318,7 +318,11 @@ func (m *App) viewKey(w int) string {
 	cur := "—"
 	if p != nil {
 		name = p.Name + "  " + p.URL
-		cur = config.MaskKey(p.Key)
+		if m.cfg.EnvKey(p) != "" {
+			cur = "来自环境变量（不落盘）"
+		} else {
+			cur = config.MaskKey(p.Key)
+		}
 	}
 	var b strings.Builder
 	title := "为当前代理设置 API Key"

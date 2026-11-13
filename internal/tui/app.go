@@ -147,7 +147,7 @@ func New(o Options) *App {
 		m.screen = scrAddProxy
 		m.formFocus = 0
 		m.form[0].Focus()
-	case m.cfg.Proxy() != nil && m.cfg.Proxy().Key == "" && len(m.cfg.Models) == 0:
+	case m.cfg.Proxy() != nil && m.cfg.KeyFor(m.cfg.Proxy()) == "" && len(m.cfg.Models) == 0:
 		m.screen = scrKey
 		m.keyInput.Focus()
 	}
@@ -419,7 +419,7 @@ func (m *App) onModelsKey(s string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "s":
 		m.loading = true
-		return m, tea.Batch(m.spin.Tick, syncModels(m.cfg.Proxy()))
+		return m, tea.Batch(m.spin.Tick, syncModels(m.cfg, m.cfg.Proxy()))
 	case "p":
 		m.screen = scrProxies
 		m.pCursor = m.proxyIndex()
@@ -572,7 +572,7 @@ func (m *App) launch(resumeID string) (tea.Model, tea.Cmd) {
 
 	spec := codex.Spec{
 		Model:    model,
-		Proxy:    m.cfg.Proxy(),
+		Proxy:    m.cfg.ProxyWithKey(),
 		Flags:    m.cfg.Flags,
 		ResumeID: resumeID,
 		Dir:      m.cwd,
@@ -616,7 +616,7 @@ func (m *App) saveKey() (tea.Model, tea.Cmd) {
 	m.keyInput.Blur()
 	if len(m.cfg.Models) == 0 {
 		m.loading = true
-		return m, tea.Batch(m.spin.Tick, syncModels(p))
+		return m, tea.Batch(m.spin.Tick, syncModels(m.cfg, p))
 	}
 	return m, nil
 }
@@ -650,7 +650,7 @@ func (m *App) submitProxy() (tea.Model, tea.Cmd) {
 	if len(m.cfg.Models) == 0 && p.Key != "" {
 		m.screen = scrModels
 		m.loading = true
-		return m, tea.Batch(m.spin.Tick, syncModels(p))
+		return m, tea.Batch(m.spin.Tick, syncModels(m.cfg, p))
 	}
 	m.screen = scrProxies
 	if p.Key == "" {

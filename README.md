@@ -91,6 +91,23 @@ codex 会给子代理线程写 `thread_source: "subagent"`，并在 `source` 里
 `a2v` 默认把这类会话从恢复列表里滤掉（本机 124 个 rollout 里有 16 个是子代理），
 `a` 键或 `a2v sessions --all` 可以把它们放回来，行尾标「子代理」。
 
+## 密钥怎么存
+
+| 项 | 现状 |
+|---|---|
+| 位置 | `~/.config/a2v/config.json`，文件 `0600`、目录 `0700`（每次读取自动纠正被放宽的权限） |
+| 显示 | UI / CLI 一律掩码（`sk-7DG…ZFXQ`）；`a2v doctor` 只显示来源和权限，不打印 key |
+| 输入 | `a2v key` 交互输入时关掉 echo；作为参数传入会提示「会留在 shell 历史与 ps 里」 |
+| 不落盘 | `A2V_KEY=... a2v`，或按代理 `A2V_KEY_NEW8W8=...`；环境变量优先于配置文件，且不会被写回文件 |
+| 体检 | `a2v doctor` 检查文件权限、`~/.veicrun/veicrun.json` 等遗留副本、shell 历史里是否有明文 key |
+
+已知边界（不做过度承诺）：
+
+- 明文存储，没有加密。能读你 home 的人（你自己、root）就能读到。
+- 启动 codex 时通过环境变量注入，同用户进程可读 `/proc/<pid>/environ`。
+- 中转服务器当然会收到这个 key，这是它的工作方式。
+- `install.sh` / `a2v update` 的信任链是 TLS + 同源 sha256，没有签名。
+
 ## 文件
 
 | 路径 | 说明 |

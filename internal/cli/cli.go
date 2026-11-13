@@ -93,7 +93,7 @@ func launch(cfg *config.Config, model, resume string, extra []string) error {
 	}
 	spec := codex.Spec{
 		Model:    model,
-		Proxy:    cfg.Proxy(),
+		Proxy:    cfg.ProxyWithKey(),
 		Flags:    cfg.Flags,
 		ResumeID: resume,
 		Extra:    extra,
@@ -455,17 +455,24 @@ func newKeyCmd() *cobra.Command {
 				return fmt.Errorf("还没有代理，先 a2v proxy add")
 			}
 			var k string
-			if len(args) == 1 {
+			switch {
+			case len(args) == 1:
 				k = strings.TrimSpace(args[0])
-			} else {
-				b, err := io.ReadAll(os.Stdin)
+				fmt.Fprintln(os.Stderr, "提示: 直接传参会留在 shell 历史和 ps 里；下次用 `a2v key` 交互输入更安全")
+			case isTTY():
+				k, err = promptSecret()
 				if err != nil {
 					return err
+				}
+			default:
+				b, rerr := io.ReadAll(os.Stdin)
+				if rerr != nil {
+					return rerr
 				}
 				k = strings.TrimSpace(string(b))
 			}
 			if k == "" {
-				return fmt.Errorf("key 为空；用法 a2v key sk-xxx")
+				return fmt.Errorf("key 为空；用法 a2v key（交互输入）或 a2v key <值>")
 			}
 			p.Key = k
 			if err := cfg.Save(); err != nil {
@@ -499,7 +506,7 @@ func newSyncCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			fmt.Printf("从 %s 拉取模型…\n", p.Name)
-			list, err := remote.Sync(ctx, p)
+			list, err := remote.Sync(ctx, cfg.WithKey(p))
 			if err != nil {
 				return err
 			}
@@ -699,7 +706,7 @@ func newDoctorCmd() *cobra.Command {
 			} else {
 				line(p.Key != "", "当前代理", fmt.Sprintf("%s  %s  key=%s", p.Name, p.URL, config.MaskKey(p.Key)))
 				ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-				code, err := remote.Health(ctx, p)
+				code, err := remote.Health(ctx, cfg.WithKey(p))
 				cancel()
 				if err != nil {
 					line(false, "代理连通性", err.Error())
@@ -731,6 +738,26 @@ func newDoctorCmd() *cobra.Command {
 				line(true, "目录固定", fmt.Sprintf("%s → %s", path, pin.Model))
 			} else {
 				line(true, "目录固定", "无（用 a2v pin <model> 创建）")
+			}
+
+			// --- 凭据存放 ---
+			if st, err := os.Stat(config.Path()); err == nil {
+				perm := st.Mode().Perm()
+				line(perm&0o077 == 0, "密钥文件", fmt.Sprintf("%s %04o", config.Path(), perm))
+			}
+			line(true, "密钥来源", keyExposure(cfg, p))
+			if lst, err := os.Stat(config.LegacyPath()); err == nil {
+				lperm := lst.Mode().Perm()
+				if lperm&0o077 != 0 {
+					line(false, "遗留 veicrun 文件", fmt.Sprintf("%s %04o 全局可读，chmod 600 一下", config.LegacyPath(), lperm))
+				} else {
+					line(true, "遗留 veicrun 文件", fmt.Sprintf("%s %04o", config.LegacyPath(), lperm))
+				}
+			}
+			if hit := historyHit(cfg); hit != "" {
+				line(false, "shell 历史", hit+" 里出现过明文 key，建议清理该行")
+			} else {
+				line(true, "shell 历史", "未发现明文 key")
 			}
 
 			home, _ := os.UserHomeDir()
@@ -867,6 +894,58 @@ func newVersionCmd() *cobra.Command {
 			fmt.Printf("a2v %s (%s/%s)\n", version.Version, runtime.GOOS, runtime.GOARCH)
 		},
 	}
+}
+
+// promptSecret reads a key with echo disabled so it never lands on screen,
+// in scrollback, or in the shell's history.
+func promptSecret() (string, error) {
+	fmt.Fprint(os.Stderr, "API Key（输入不回显，回车确认）: ")
+	echoOff := exec.Command("stty", "-echo")
+	echoOff.Stdin = os.Stdin
+	hidden := echoOff.Run() == nil
+	if hidden {
+		defer func() {
+			on := exec.Command("stty", "echo")
+			on.Stdin = os.Stdin
+			_ = on.Run()
+		}()
+	}
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	fmt.Fprintln(os.Stderr)
+	if err != nil && strings.TrimSpace(line) == "" {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+// keyExposure describes where a key currently lives, for doctor.
+func keyExposure(cfg *config.Config, p *config.Proxy) string {
+	if cfg.EnvKey(p) != "" {
+		return "环境变量（不落盘）"
+	}
+	if p != nil && p.Key != "" {
+		return "配置文件（0600）"
+	}
+	return "未设置"
+}
+
+// historyHit reports whether any configured key shows up in shell history.
+func historyHit(cfg *config.Config) string {
+	home, _ := os.UserHomeDir()
+	for _, name := range []string{".zsh_history", ".bash_history"} {
+		path := filepath.Join(home, name)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		body := string(b)
+		for _, p := range cfg.Proxies {
+			if len(p.Key) >= 12 && strings.Contains(body, p.Key) {
+				return path
+			}
+		}
+	}
+	return ""
 }
 
 func isTTY() bool {

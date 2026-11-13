@@ -19,14 +19,14 @@ type modelsMsg struct {
 var errNoProxy = errors.New("还没有代理，先按 p 添加一个")
 
 // syncModels pulls the catalogue from the active relay.
-func syncModels(p *config.Proxy) tea.Cmd {
+func syncModels(cfg *config.Config, p *config.Proxy) tea.Cmd {
 	return func() tea.Msg {
 		if p == nil {
 			return modelsMsg{err: errNoProxy}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		list, err := remote.Sync(ctx, p)
+		list, err := remote.Sync(ctx, cfg.WithKey(p))
 		return modelsMsg{list: list, err: err}
 	}
 }

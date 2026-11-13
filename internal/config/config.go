@@ -101,6 +101,7 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("解析 %s 失败: %w", path, err)
 		}
 		c.normalize()
+		tighten(Path(), filepath.Dir(Path()))
 		return &c, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -189,6 +190,57 @@ func (c *Config) Save() error {
 		return err
 	}
 	return os.Rename(tmp, Path())
+}
+
+// EnvKey returns a key supplied through the environment, if any. It lets CI
+// and shared machines run a2v without ever writing a secret to disk.
+//
+//	A2V_KEY            applies to whichever proxy is active
+//	A2V_KEY_<PROXYID>  pins a key to one proxy (id upper-cased, - and . -> _)
+func (c *Config) EnvKey(p *Proxy) string {
+	if v := strings.TrimSpace(os.Getenv("A2V_KEY")); v != "" {
+		return v
+	}
+	if p == nil {
+		return ""
+	}
+	repl := strings.NewReplacer("-", "_", ".", "_", "/", "_")
+	name := "A2V_KEY_" + strings.ToUpper(repl.Replace(p.ID))
+	return strings.TrimSpace(os.Getenv(name))
+}
+
+// KeyFor is the key to actually use: environment first, then the file.
+func (c *Config) KeyFor(p *Proxy) string {
+	if k := c.EnvKey(p); k != "" {
+		return k
+	}
+	if p == nil {
+		return ""
+	}
+	return p.Key
+}
+
+// WithKey returns a copy of p carrying the effective (env-or-file) key, for
+// callers that must not write the copy back to disk.
+func (c *Config) WithKey(p *Proxy) *Proxy {
+	if p == nil {
+		return nil
+	}
+	cp := *p
+	cp.Key = c.KeyFor(p)
+	return &cp
+}
+
+// ProxyWithKey returns the active proxy with the effective key filled in.
+// It is a copy, so nothing written back to disk ever gains an env-sourced key.
+func (c *Config) ProxyWithKey() *Proxy {
+	p := c.Proxy()
+	if p == nil {
+		return nil
+	}
+	cp := *p
+	cp.Key = c.KeyFor(p)
+	return &cp
 }
 
 // Proxy returns the active proxy, or nil when none is configured.
@@ -373,6 +425,16 @@ func LocalPath(dir string) (string, *Local) {
 		dir = parent
 	}
 	return "", nil
+}
+
+// tighten fixes overly permissive modes on the config file and its directory.
+func tighten(file, dir string) {
+	if st, err := os.Stat(file); err == nil && st.Mode().Perm()&0o077 != 0 {
+		_ = os.Chmod(file, 0o600)
+	}
+	if st, err := os.Stat(dir); err == nil && st.IsDir() && st.Mode().Perm()&0o077 != 0 {
+		_ = os.Chmod(dir, 0o700)
+	}
 }
 
 // MergeHistory appends models never seen before to the history catalogue.
