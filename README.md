@@ -30,6 +30,10 @@ curl -fsSL https://tool.kervein.club/a2v/install.sh | bash
 
 Linux / macOS，amd64 / arm64。脚本只做三件事：认平台、下二进制、按 `sha256` 校验后放进 `PATH`（优先 `/usr/local/bin`，其次 `~/.local/bin`）。
 
+首次运行自带一个中转端点 **https://new.8w8.shop**（只有地址，不带任何 key），
+粘贴你自己的 API Key 后会自动拉取该 key 授权的模型列表。不想要它：
+`a2v proxy rm new8w8`，再 `a2v proxy add` 换成自己的中转。
+
 自更新：`a2v update`。指定目录：`... | bash -s -- --dir ~/bin`。
 
 ## 用法

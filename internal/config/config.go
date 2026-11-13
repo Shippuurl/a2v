@@ -30,6 +30,10 @@ type Model struct {
 	Desc string `json:"desc,omitempty"`
 }
 
+// DefaultProxyURL is the relay a2v ships with. It carries no key: every user
+// still has to bring their own.
+const DefaultProxyURL = "https://new.8w8.shop"
+
 // Proxy is one upstream relay. Auth is "x-api-key" for Anthropic-style
 // endpoints and empty for bearer.
 type Proxy struct {
@@ -38,6 +42,9 @@ type Proxy struct {
 	URL  string `json:"url"`
 	Key  string `json:"key,omitempty"`
 	Auth string `json:"auth,omitempty"`
+
+	// Builtin marks the preset relay a2v creates on a fresh install.
+	Builtin bool `json:"builtin,omitempty"`
 
 	// Models is the catalogue this relay's key is actually authorised for.
 	// It is what the menu shows; entries outside it are history and stay
@@ -102,8 +109,24 @@ func Load() (*Config, error) {
 	if c, ok := importLegacy(); ok {
 		return c, c.Save()
 	}
-	c := &Config{Version: Version, Aliases: map[string]string{}}
-	return c, nil
+	return DefaultConfig(), nil
+}
+
+// DefaultConfig is what a brand-new machine starts with: one relay endpoint
+// and no key. Users only paste their own key.
+func DefaultConfig() *Config {
+	c := &Config{
+		Version:     Version,
+		Aliases:     map[string]string{},
+		ActiveProxy: "new8w8",
+		Proxies: []Proxy{{
+			ID:      "new8w8",
+			Name:    "new8w8",
+			URL:     DefaultProxyURL,
+			Builtin: true,
+		}},
+	}
+	return c
 }
 
 // importLegacy copies ~/.veicrun/veicrun.json when it exists.

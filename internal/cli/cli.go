@@ -429,7 +429,11 @@ func listProxies() error {
 		if p.ID == cfg.ActiveProxy {
 			mark = "●"
 		}
-		fmt.Printf("  %s %-16s %-42s %s\n", mark, p.Name, p.URL, config.MaskKey(p.Key))
+		name := p.Name
+		if p.Builtin {
+			name += "·内置"
+		}
+		fmt.Printf("  %s %-16s %-42s %s\n", mark, name, p.URL, config.MaskKey(p.Key))
 	}
 	return nil
 }

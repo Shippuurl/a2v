@@ -140,12 +140,16 @@ func New(o Options) *App {
 
 	m.refresh()
 
-	// First run: no relay yet, so open the add-proxy form instead of showing
-	// an empty model list that the user has no idea what to do with.
-	if len(m.cfg.Proxies) == 0 {
+	// First run: the shipped relay has no key yet, so ask for one instead of
+	// showing an empty model list.
+	switch {
+	case len(m.cfg.Proxies) == 0:
 		m.screen = scrAddProxy
 		m.formFocus = 0
 		m.form[0].Focus()
+	case m.cfg.Proxy() != nil && m.cfg.Proxy().Key == "" && len(m.cfg.Models) == 0:
+		m.screen = scrKey
+		m.keyInput.Focus()
 	}
 
 	// Start on the pinned / configured model.
@@ -164,7 +168,8 @@ func New(o Options) *App {
 }
 
 func (m *App) Init() tea.Cmd {
-	if m.screen == scrAddProxy {
+	switch m.screen {
+	case scrAddProxy, scrKey:
 		return tea.Batch(tickCmd(), textinput.Blink)
 	}
 	return tickCmd()
@@ -609,6 +614,10 @@ func (m *App) saveKey() (tea.Model, tea.Cmd) {
 	}
 	m.screen = scrModels
 	m.keyInput.Blur()
+	if len(m.cfg.Models) == 0 {
+		m.loading = true
+		return m, tea.Batch(m.spin.Tick, syncModels(p))
+	}
 	return m, nil
 }
 

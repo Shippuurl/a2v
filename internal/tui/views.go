@@ -211,7 +211,11 @@ func (m *App) viewProxies(w int) string {
 			name = name.Bold(true)
 		}
 		key := config.MaskKey(p.Key)
-		line := cur + dotStyle.Render(dot) + "  " + name.Render(fill(trunc(p.Name, 15), 16)) +
+		label := p.Name
+		if p.Builtin {
+			label += " ·内置"
+		}
+		line := cur + dotStyle.Render(dot) + "  " + name.Render(fill(trunc(label, 15), 16)) +
 			style(faint).Render(fill(trunc(p.URL, 34), 35))
 		right := style(faint).Render(key)
 		gap := w - lipgloss.Width(line) - lipgloss.Width(right)
@@ -317,7 +321,11 @@ func (m *App) viewKey(w int) string {
 		cur = config.MaskKey(p.Key)
 	}
 	var b strings.Builder
-	b.WriteString("  " + style(subtle).Render("为当前代理设置 API Key") + "\n\n")
+	title := "为当前代理设置 API Key"
+	if p != nil && p.Builtin {
+		title = "内置中转 " + p.URL + "，粘贴你自己的 API Key 即可"
+	}
+	b.WriteString("  " + style(subtle).Render(title) + "\n\n")
 	b.WriteString("  " + style(faint).Render("代理   ") + style(ink).Render(name) + "\n")
 	b.WriteString("  " + style(faint).Render("当前   ") + style(subtle).Render(cur) + "\n\n")
 	b.WriteString("  " + m.keyInput.View() + "\n\n")
