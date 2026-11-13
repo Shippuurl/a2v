@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>a2v — a2vec 的命令行启动器</title>
+<meta name="description" content="一条命令装上 a2v：模型菜单、中转代理、会话恢复，全部收进终端里的一个界面。">
+<style>
+  :root{
+    --bg:#080a0f; --panel:#0e1219; --line:#1d2430; --ink:#e6edf3;
+    --muted:#8b949e; --dim:#4b5563;
+    --teal:#5eead4; --iris:#818cf8; --orchid:#c084fc;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(60% 40% at 18% -10%,rgba(94,234,212,.10),transparent 60%),
+      radial-gradient(50% 40% at 85% 0%,rgba(192,132,252,.10),transparent 60%);
+  }
+  .wrap{position:relative;z-index:1;max-width:920px;margin:0 auto;padding:56px 24px 96px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:64px}
+  .mark{
+    font-size:26px;line-height:1;
+    background:linear-gradient(100deg,var(--teal),var(--iris) 55%,var(--orchid));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .brand{font-weight:700;letter-spacing:-.01em}
+  .brand span{color:var(--dim);font-weight:400;margin-left:10px;font-size:14px}
+  .spacer{flex:1}
+  header a{color:var(--muted);text-decoration:none;font-size:14px;font-family:var(--mono)}
+  header a:hover{color:var(--ink)}
+
+  h1{font-size:clamp(30px,5vw,46px);line-height:1.2;letter-spacing:-.02em;margin:0 0 18px;font-weight:700}
+  h1 em{
+    font-style:normal;
+    background:linear-gradient(100deg,var(--teal),var(--iris) 55%,var(--orchid));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .lede{color:var(--muted);font-size:17px;max-width:640px;margin:0 0 40px}
+  .lede code{font-family:var(--mono);font-size:.92em;color:var(--ink);background:#141a24;padding:1px 6px;border-radius:5px}
+
+  .install{
+    display:flex;align-items:center;gap:12px;
+    background:linear-gradient(180deg,#11161f,#0c1017);
+    border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+    font-family:var(--mono);font-size:14px;overflow:auto;
+  }
+  .install .p{color:var(--teal);user-select:none}
+  .install code{white-space:nowrap}
+  .copy{
+    margin-left:auto;flex:none;border:1px solid var(--line);background:#151b26;color:var(--muted);
+    font:12px/1 var(--mono);padding:8px 10px;border-radius:7px;cursor:pointer;transition:.15s;
+  }
+  .copy:hover{color:var(--ink);border-color:#2b3648}
+  .alts{margin:14px 0 0;color:var(--dim);font-size:13px;font-family:var(--mono)}
+  .alts span{color:var(--muted)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:64px 0 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 18px 16px}
+  .card h3{margin:0 0 6px;font-size:15px;letter-spacing:.01em}
+  .card h3 b{font-weight:700}
+  .card p{margin:0;color:var(--muted);font-size:14px}
+  .card .ico{font-family:var(--mono);color:var(--iris);font-size:13px;margin-bottom:10px;display:block}
+
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);margin:72px 0 18px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:500;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  td:first-child{font-family:var(--mono);color:var(--teal);white-space:nowrap;width:1%}
+  td:last-child{color:var(--muted)}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:700px){.split{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .panel h3{margin:0 0 12px;font-size:14px}
+  .kv{display:flex;gap:14px;font-size:13.5px;padding:5px 0}
+  .kv b{font-family:var(--mono);font-weight:500;color:var(--ink);min-width:92px}
+  .kv span{color:var(--muted)}
+
+  footer{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);
+         display:flex;gap:18px;flex-wrap:wrap;color:var(--dim);font-size:13px;font-family:var(--mono)}
+  footer a{color:var(--muted);text-decoration:none}
+  footer a:hover{color:var(--ink)}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);opacity:0;
+         background:#151b26;border:1px solid var(--line);color:var(--ink);padding:9px 14px;
+         border-radius:8px;font-size:13px;transition:.2s;pointer-events:none;z-index:9}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark">▲</div>
+    <div class="brand">a2v<span>a2vec · codex launcher</span></div>
+    <div class="spacer"></div>
+    <a href="/a2v/install.sh">install.sh ↗</a>
+  </header>
+
+  <h1>一个菜单，<em>接上所有模型</em>。</h1>
+  <p class="lede">
+    a2v 把 <code>codex</code>、多个中转代理、模型目录和会话恢复收进终端里的一个界面。
+    键盘上下选模型，回车进 codex；<code>p</code> 换代理，<code>r</code> 接着上次聊。
+  </p>
+
+  <div class="install">
+    <span class="p">$</span>
+    <code id="cmd">curl -fsSL https://tool.kervein.club/a2v/install.sh | bash</code>
+    <button class="copy" id="copy">复制</button>
+  </div>
+  <p class="alts"><span>Linux / macOS · amd64 / arm64 · 安装前自动校验 sha256</span></p>
+
+  <div class="grid">
+    <div class="card"><span class="ico">❯ models</span><h3><b>模型菜单</b></h3><p>别名、描述、模糊筛选。选中即启动，不用记一长串 id。</p></div>
+    <div class="card"><span class="ico">❯ proxy</span><h3><b>代理随切随用</b></h3><p>多个中转并存，切代理自动注入 base_url 与环境变量，不再手改 config.toml。</p></div>
+    <div class="card"><span class="ico">❯ resume</span><h3><b>会话恢复</b></h3><p>直接读 <code>~/.codex/sessions</code>，挑一条继续，并强制换回你选的模型。</p></div>
+    <div class="card"><span class="ico">❯ pin</span><h3><b>目录固定</b></h3><p>项目里放一个 <code>.a2v.json</code>，进目录就是那个模型，回车即开工。</p></div>
+  </div>
+
+  <h2>常用命令</h2>
+  <table>
+    <tr><th>命令</th><th>作用</th></tr>
+    <tr><td>a2v</td><td>交互菜单：选模型 / 切代理 / 恢复会话</td></tr>
+    <tr><td>a2v sol</td><td>按别名或 id 直接启动 codex</td></tr>
+    <tr><td>a2v run &lt;model&gt; -- &lt;args&gt;</td><td>透传参数给 codex</td></tr>
+    <tr><td>a2v proxy use &lt;id&gt;</td><td>切换当前代理（list / add / rm 同族）</td></tr>
+    <tr><td>a2v key &lt;sk-...&gt;</td><td>写入 key，并同步 codex 的 auth.json</td></tr>
+    <tr><td>a2v sync</td><td>从代理拉取模型列表</td></tr>
+    <tr><td>a2v pin &lt;model&gt;</td><td>把当前目录固定到某个模型（<code>-</code> 清除）</td></tr>
+    <tr><td>a2v doctor</td><td>体检：codex、配置、代理连通性</td></tr>
+    <tr><td>a2v update</td><td>从本站更新自身</td></tr>
+  </table>
+
+  <h2>界面里的键</h2>
+  <div class="split">
+    <div class="panel">
+      <h3>浏览</h3>
+      <div class="kv"><b>↑ ↓ / j k</b><span>移动选择</span></div>
+      <div class="kv"><b>⏎</b><span>用当前模型启动</span></div>
+      <div class="kv"><b>/</b><span>关键词筛选模型</span></div>
+      <div class="kv"><b>?</b><span>键位帮助</span></div>
+    </div>
+    <div class="panel">
+      <h3>切换</h3>
+      <div class="kv"><b>p</b><span>代理列表 / 新增</span></div>
+      <div class="kv"><b>ctrl+k</b><span>设置 API Key</span></div>
+      <div class="kv"><b>r</b><span>恢复会话</span></div>
+      <div class="kv"><b>s</b><span>重新拉模型</span></div>
+    </div>
+  </div>
+
+  <h2>文件在哪</h2>
+  <div class="panel">
+    <div class="kv"><b>配置</b><span>~/.config/a2v/config.json（0600，含 key）</span></div>
+    <div class="kv"><b>目录固定</b><span>./.a2v.json</span></div>
+    <div class="kv"><b>旧配置</b><span>首次运行自动从 ~/.veicrun/veicrun.json 迁移</span></div>
+    <div class="kv"><b>会话</b><span>~/.codex/sessions（只读，不修改）</span></div>
+  </div>
+
+  <footer>
+    <span>MIT</span>
+    <a href="/a2v/install.sh">install.sh</a>
+    <a href="/a2v/README.md">README</a>
+    <a href="https://tool.kervein.club/jetson/">jetson-jp62 ↗</a>
+    <span style="margin-left:auto">a2v v1.0.0</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast">已复制</div>
+<script>
+  const btn = document.getElementById('copy');
+  const toast = document.getElementById('toast');
+  btn.addEventListener('click', async () => {
+    const text = document.getElementById('cmd').textContent.trim();
+    try { await navigator.clipboard.writeText(text); }
+    catch { const r = document.createRange(); r.selectNode(document.getElementById('cmd'));
+            getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+    toast.classList.add('on');
+    setTimeout(() => toast.classList.remove('on'), 1200);
+  });
+</script>
+</body>
+</html>
