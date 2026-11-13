@@ -9,7 +9,7 @@
 ```
   ▲  a2v  a2vec · codex launcher
   ──────────────────────────────────────────────────────
-  proxy new8w8   model gpt-5.6-sol   dir ~/project
+  proxy my-relay  model gpt-5.6-sol   dir ~/project
 
   ▌  31  GPT 5.6 Sol  GPT 代码                              g
      32  GPT 5.6 Sol
