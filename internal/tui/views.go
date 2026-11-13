@@ -65,6 +65,10 @@ func (m *App) View() string {
 	}
 
 	b.WriteString("\n")
+	if m.confirm != nil {
+		b.WriteString("  " + style(warn).Bold(true).Render("⚠ "+m.confirm.prompt) +
+			style(faint).Render("   y 确认 · n 取消") + "\n")
+	}
 	if s := m.statusLine(cw - 2); s != "" {
 		b.WriteString("  " + s + "\n")
 	}
@@ -227,19 +231,38 @@ func (m *App) viewSessions(w int) string {
 	if m.loadErr != nil {
 		return "  " + style(bad).Render("读取失败: "+m.loadErr.Error()) + "\n"
 	}
-	if len(m.sessions) == 0 {
+	list := m.visibleSessions()
+	subCount := 0
+	for _, s := range m.sessions {
+		if s.Subagent {
+			subCount++
+		}
+	}
+	hidden := subCount
+	if len(list) == 0 {
+		if hidden > 0 {
+			return "  " + style(faint).Render(fmt.Sprintf("只有 %d 条子代理会话（a 显示）", hidden)) + "\n"
+		}
 		return "  " + style(faint).Render("没有可恢复的会话") + "\n"
 	}
+
 	var b strings.Builder
-	n := m.pageSize()
-	end := 0
-	if n < len(m.sessions) {
-		end = n
-	} else {
-		end = len(m.sessions)
+	if hidden > 0 && !m.showSubagents {
+		b.WriteString("  " + style(faint).Render(fmt.Sprintf("%d 条子代理会话已隐藏（a 显示）", hidden)) + "\n\n")
+	} else if m.showSubagents {
+		b.WriteString("  " + style(faint).Render(fmt.Sprintf("全部 %d 条（含 %d 条子代理）", len(list), subCount)) + "\n\n")
 	}
-	for i := 0; i < end; i++ {
-		s := m.sessions[i]
+
+	n := m.pageSize()
+	end := m.sOffset + n
+	if end > len(list) {
+		end = len(list)
+	}
+	if m.sOffset > len(list) {
+		m.sOffset = 0
+	}
+	for i := m.sOffset; i < end; i++ {
+		s := list[i]
 		sel := i == m.sCursor
 		cur := "   "
 		if sel {
@@ -249,8 +272,18 @@ func (m *App) viewSessions(w int) string {
 		if len(model) > 18 {
 			model = model[:17] + "…"
 		}
+		title := s.Title
+		tag := ""
+		if s.Subagent {
+			tag = style(faint).Render("  子代理")
+		}
+		// 3 cursor + 11 time + 2 gap + 19 model + tag + 1 margin
+		titleW := w - (3 + 11 + 2 + 19 + lipgloss.Width(tag) + 1)
+		if titleW < 10 {
+			titleW = 10
+		}
 		line := cur + style(faint).Render(s.Time.Format("01-02 15:04")) + "  " +
-			style(iris).Render(fill(model, 19)) + style(inkOrDim(sel)).Render(trunc(s.Title, w-32))
+			style(iris).Render(fill(model, 19)) + style(inkOrDim(sel)).Render(trunc(title, titleW)) + tag
 		b.WriteString(line + "\n")
 	}
 	return b.String()
@@ -316,6 +349,7 @@ func (m *App) viewHelp(w int) string {
 		{"r", "恢复最近的 codex 会话"},
 		{"s", "从当前代理重新拉取模型列表（按 key 授权）"},
 		{"t", "显示 / 折叠未授权的历史模型"},
+		{"d", "删除选中的模型 / 中转（y 确认）"},
 		{"?", "打开 / 关闭这个帮助"},
 		{"q", "退出"},
 	}
@@ -349,7 +383,7 @@ func (m *App) footer(w int) string {
 	var parts []string
 	switch m.screen {
 	case scrModels:
-		parts = []string{hint("↑↓", "选择"), hint("⏎", "启动"), hint("/", "筛选"), hint("p", "代理"), hint("r", "会话"), hint("?", "帮助"), hint("q", "退出")}
+		parts = []string{hint("↑↓", "选择"), hint("⏎", "启动"), hint("/", "筛选"), hint("d", "删除"), hint("p", "代理"), hint("r", "会话"), hint("?", "帮助"), hint("q", "退出")}
 		if len(m.stale) > 0 {
 			label := fmt.Sprintf("历史 %d", len(m.stale))
 			if m.showStale {
@@ -358,9 +392,9 @@ func (m *App) footer(w int) string {
 			parts = append([]string{hint("t", label)}, parts...)
 		}
 	case scrProxies:
-		parts = []string{hint("↑↓", "选择"), hint("⏎", "切换"), hint("a", "添加"), hint("esc", "返回")}
+		parts = []string{hint("↑↓", "选择"), hint("⏎", "切换"), hint("a", "添加"), hint("d", "删除"), hint("esc", "返回")}
 	case scrSessions:
-		parts = []string{hint("↑↓", "选择"), hint("⏎", "恢复"), hint("esc", "返回")}
+		parts = []string{hint("↑↓", "选择"), hint("⏎", "恢复"), hint("a", "子代理"), hint("esc", "返回")}
 	case scrKey:
 		parts = []string{hint("⏎", "保存"), hint("esc", "取消")}
 	case scrAddProxy:

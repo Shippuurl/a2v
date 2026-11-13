@@ -69,6 +69,7 @@ type App struct {
 	// sessions
 	sessions []codex.Session
 	sCursor  int
+	sOffset  int
 	loading  bool
 	spin     spinner.Model
 	loadErr  error
@@ -91,6 +92,17 @@ type App struct {
 	authorised map[string]bool
 	stale      []config.Model // history the current key is not authorised for
 	showStale  bool
+
+	showSubagents bool
+
+	confirm *confirmState
+}
+
+// confirmState is a pending destructive action awaiting y/n.
+type confirmState struct {
+	kind   string // "model" | "proxy"
+	id     string
+	prompt string
 }
 
 // New builds the app.
@@ -244,6 +256,10 @@ func (m *App) onKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	if m.confirm != nil {
+		return m.resolveConfirm(s)
+	}
+
 	// Text-entry screens own most keys.
 	switch m.screen {
 	case scrKey:
@@ -362,6 +378,15 @@ func (m *App) onModelsKey(s string) (tea.Model, tea.Cmd) {
 		m.searching = true
 		m.search.Focus()
 		return m, textinput.Blink
+	case "d":
+		if len(m.filtered) == 0 {
+			return m, nil
+		}
+		mo := m.filtered[m.cursor]
+		name := displayName(mo)
+		m.confirm = &confirmState{kind: "model", id: mo.ID,
+			prompt: fmt.Sprintf("从目录删除模型 %s (%s)？", name, mo.ID)}
+		return m, nil
 	case "t":
 		if len(m.stale) == 0 {
 			m.setStatus("没有历史模型可显示", false)
@@ -406,6 +431,13 @@ func (m *App) onProxiesKey(s string) (tea.Model, tea.Cmd) {
 		if m.pCursor < len(m.cfg.Proxies)-1 {
 			m.pCursor++
 		}
+	case "d":
+		if m.pCursor >= 0 && m.pCursor < len(m.cfg.Proxies) {
+			p := m.cfg.Proxies[m.pCursor]
+			m.confirm = &confirmState{kind: "proxy", id: p.ID,
+				prompt: fmt.Sprintf("删除中转 %s (%s)？", p.Name, p.URL)}
+		}
+		return m, nil
 	case "a":
 		m.screen = scrAddProxy
 		m.formFocus = 0
@@ -430,26 +462,76 @@ func (m *App) onProxiesKey(s string) (tea.Model, tea.Cmd) {
 }
 
 func (m *App) onSessionsKey(s string) (tea.Model, tea.Cmd) {
+	v := m.visibleSessions()
 	switch s {
 	case "up", "k":
 		if m.sCursor > 0 {
 			m.sCursor--
 		}
 	case "down", "j":
-		if m.sCursor < len(m.sessions)-1 {
+		if m.sCursor < len(v)-1 {
 			m.sCursor++
 		}
+	case "home":
+		m.sCursor = 0
+	case "end":
+		if len(v) > 0 {
+			m.sCursor = len(v) - 1
+		}
+	case "a":
+		m.showSubagents = !m.showSubagents
+		m.sCursor = 0
+		m.sOffset = 0
+		if m.showSubagents {
+			m.setStatus(fmt.Sprintf("显示全部 %d 条（含子代理）", len(m.sessions)), false)
+		} else {
+			m.setStatus(fmt.Sprintf("已排除子代理，剩 %d 条", len(m.visibleSessions())), false)
+		}
 	case "enter":
-		if m.sCursor >= 0 && m.sCursor < len(m.sessions) {
-			return m.launch(m.sessions[m.sCursor].ID)
+		if m.sCursor >= 0 && m.sCursor < len(v) {
+			return m.launch(v[m.sCursor].ID)
 		}
 	}
+	m.clampSessionOffset()
 	return m, nil
+}
+
+// clampSessionOffset keeps the cursor inside the visible window.
+func (m *App) clampSessionOffset() {
+	n := m.pageSize()
+	total := len(m.visibleSessions())
+	if m.sCursor < m.sOffset {
+		m.sOffset = m.sCursor
+	}
+	if m.sCursor >= m.sOffset+n {
+		m.sOffset = m.sCursor - n + 1
+	}
+	if max := total - n; m.sOffset > max {
+		m.sOffset = max
+	}
+	if m.sOffset < 0 {
+		m.sOffset = 0
+	}
+}
+
+// visibleSessions is the picker's list: sub-agent threads are hidden unless
+// the user asks for them.
+func (m *App) visibleSessions() []codex.Session {
+	if m.showSubagents {
+		return m.sessions
+	}
+	out := make([]codex.Session, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		if !s.Subagent {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func loadSessions() tea.Cmd {
 	return func() tea.Msg {
-		list, err := codex.Recent(24)
+		list, err := codex.RecentAll(0)
 		return sessionsMsg{list: list, err: err}
 	}
 }
@@ -543,6 +625,75 @@ func (m *App) submitProxy() (tea.Model, tea.Cmd) {
 		m.form[i].Blur()
 	}
 	return m, nil
+}
+
+// resolveConfirm executes or drops a pending destructive action.
+func (m *App) resolveConfirm(key string) (tea.Model, tea.Cmd) {
+	c := m.confirm
+	switch key {
+	case "y", "Y":
+		m.confirm = nil
+		switch c.kind {
+		case "model":
+			dropModel(m.cfg, c.id)
+			if err := m.cfg.Save(); err != nil {
+				m.setStatus("保存失败: "+err.Error(), true)
+				return m, nil
+			}
+			m.refresh()
+			m.setStatus("已删除模型 "+c.id, false)
+		case "proxy":
+			p := m.cfg.ProxyByID(c.id)
+			name := c.id
+			if p != nil {
+				name = p.Name
+			}
+			if m.cfg.RemoveProxy(c.id) {
+				if m.cfg.ActiveProxy == "" && len(m.cfg.Proxies) > 0 {
+					m.cfg.ActiveProxy = m.cfg.Proxies[0].ID
+				}
+				if err := m.cfg.Save(); err != nil {
+					m.setStatus("保存失败: "+err.Error(), true)
+					return m, nil
+				}
+				m.refresh()
+				if m.pCursor >= len(m.cfg.Proxies) && m.pCursor > 0 {
+					m.pCursor = len(m.cfg.Proxies) - 1
+				}
+				m.setStatus("已删除中转 "+name, false)
+			}
+		}
+	case "n", "N", "esc":
+		m.confirm = nil
+		m.setStatus("已取消", false)
+	}
+	return m, nil
+}
+
+// dropModel removes a model from history and from every proxy's catalogue.
+func dropModel(cfg *config.Config, id string) {
+	out := cfg.Models[:0]
+	for _, mo := range cfg.Models {
+		if mo.ID != id {
+			out = append(out, mo)
+		}
+	}
+	cfg.Models = out
+	for i := range cfg.Proxies {
+		if len(cfg.Proxies[i].Models) == 0 {
+			continue
+		}
+		keep := cfg.Proxies[i].Models[:0]
+		for _, mo := range cfg.Proxies[i].Models {
+			if mo.ID != id {
+				keep = append(keep, mo)
+			}
+		}
+		cfg.Proxies[i].Models = keep
+	}
+	if cfg.Model == id {
+		cfg.Model = ""
+	}
 }
 
 func (m *App) setStatus(s string, isErr bool) {

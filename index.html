@@ -132,7 +132,8 @@
     <tr><td>a2v run &lt;model&gt; -- &lt;args&gt;</td><td>透传参数给 codex</td></tr>
     <tr><td>a2v proxy use &lt;id&gt;</td><td>切换当前代理（list / add / rm 同族）</td></tr>
     <tr><td>a2v key &lt;sk-...&gt;</td><td>写入 key，并同步 codex 的 auth.json</td></tr>
-    <tr><td>a2v sync</td><td>从代理拉取模型列表</td></tr>
+    <tr><td>a2v sync</td><td>按当前 key 拉取授权模型（<code>--prune</code> 清理历史）</td></tr>
+    <tr><td>a2v models rm &lt;id&gt;</td><td>删除目录里的模型</td></tr>
     <tr><td>a2v pin &lt;model&gt;</td><td>把当前目录固定到某个模型（<code>-</code> 清除）</td></tr>
     <tr><td>a2v doctor</td><td>体检：codex、配置、代理连通性</td></tr>
     <tr><td>a2v update</td><td>从本站更新自身</td></tr>
@@ -152,7 +153,8 @@
       <div class="kv"><b>p</b><span>代理列表 / 新增</span></div>
       <div class="kv"><b>ctrl+k</b><span>设置 API Key</span></div>
       <div class="kv"><b>r</b><span>恢复会话</span></div>
-      <div class="kv"><b>s</b><span>重新拉模型</span></div>
+      <div class="kv"><b>a</b><span>显示子代理会话</span></div>
+      <div class="kv"><b>d</b><span>删除模型 / 代理</span></div>
     </div>
   </div>
 

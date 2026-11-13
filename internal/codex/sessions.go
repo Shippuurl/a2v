@@ -13,11 +13,15 @@ import (
 
 // Session is one row of the resume picker.
 type Session struct {
-	ID    string
-	Title string
-	Model string
-	CWD   string
-	Time  time.Time
+	ID       string
+	Path     string
+	Title    string
+	First    string // first real user prompt
+	Model    string
+	CWD      string
+	Time     time.Time
+	Subagent bool   // spawned by another thread, not a session you started
+	Parent   string // parent thread id, when codex recorded one
 }
 
 var uuidRe = regexp.MustCompile(`([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
@@ -31,8 +35,13 @@ func SessionsDir() string {
 	return filepath.Join(home, ".codex", "sessions")
 }
 
-// Recent returns the most recently modified sessions, newest first.
-func Recent(limit int) ([]Session, error) {
+// Recent returns user sessions (sub-agent threads excluded), newest first.
+func Recent(limit int) ([]Session, error) { return recent(limit, false) }
+
+// RecentAll keeps sub-agent threads too.
+func RecentAll(limit int) ([]Session, error) { return recent(limit, true) }
+
+func recent(limit int, includeSubagents bool) ([]Session, error) {
 	root := SessionsDir()
 	var files []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -69,6 +78,11 @@ func Recent(limit int) ([]Session, error) {
 	out := make([]Session, 0, len(ranked))
 	for _, f := range ranked {
 		s := parseSession(f.path, f.mod)
+		// A sub-agent thread is a fork of its parent and shares the parent's
+		// session id, so this filter has to run before any id-based dedupe.
+		if s.Subagent && !includeSubagents {
+			continue
+		}
 		out = append(out, s)
 	}
 	return out, nil
@@ -78,12 +92,14 @@ type record struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`
 	Payload   struct {
-		SessionID string `json:"session_id"`
-		CWD       string `json:"cwd"`
-		Type      string `json:"type"`
-		Role      string `json:"role"`
-		Model     string `json:"model"`
-		Content   []struct {
+		SessionID    string          `json:"session_id"`
+		CWD          string          `json:"cwd"`
+		Type         string          `json:"type"`
+		ThreadSource string          `json:"thread_source"`
+		Source       json.RawMessage `json:"source"`
+		Role         string          `json:"role"`
+		Model        string          `json:"model"`
+		Content      []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
@@ -95,7 +111,7 @@ type record struct {
 
 // parseSession reads only as much of the rollout as it needs.
 func parseSession(path string, mod time.Time) Session {
-	s := Session{ID: sessionID(path), Time: mod}
+	s := Session{ID: sessionID(path), Path: path, Time: mod}
 	f, err := os.Open(path)
 	if err != nil {
 		return s
@@ -104,6 +120,7 @@ func parseSession(path string, mod time.Time) Session {
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	metaSeen := false
 	for line := 0; sc.Scan() && line < 400; line++ {
 		b := sc.Bytes()
 		if len(b) == 0 || b[0] != '{' {
@@ -115,9 +132,16 @@ func parseSession(path string, mod time.Time) Session {
 		}
 		switch {
 		case r.Type == "session_meta":
+			// A fork can carry several metas: its own (first) and the parent's
+			// context. Only the first one identifies this rollout.
+			if metaSeen {
+				continue
+			}
+			metaSeen = true
 			if r.Payload.SessionID != "" {
 				s.ID = r.Payload.SessionID
 			}
+			s.Subagent, s.Parent = subagentInfo(r.Payload.ThreadSource, r.Payload.Source)
 			if r.Payload.CWD != "" {
 				s.CWD = r.Payload.CWD
 			}
@@ -145,7 +169,8 @@ func parseSession(path string, mod time.Time) Session {
 				strings.HasPrefix(text, "<user_instructions") || strings.HasPrefix(text, "<permissions") {
 				continue
 			}
-			s.Title = cleanTitle(text)
+			s.First = cleanTitle(text)
+			s.Title = s.First
 		}
 		if s.Title != "" && s.Model != "" && s.CWD != "" {
 			break
@@ -155,6 +180,30 @@ func parseSession(path string, mod time.Time) Session {
 		s.Title = "(无标题会话)"
 	}
 	return s
+}
+
+// subagentInfo recognises threads codex spawned for a sub-agent. Modern
+// rollouts set thread_source=subagent and carry the parent id in source:
+//
+//	{"subagent":{"thread_spawn":{"parent_thread_id":"..."}}}
+func subagentInfo(threadSource string, source json.RawMessage) (bool, string) {
+	parent := ""
+	if len(source) > 0 {
+		var src struct {
+			Subagent *struct {
+				ThreadSpawn *struct {
+					ParentThreadID string `json:"parent_thread_id"`
+				} `json:"thread_spawn"`
+			} `json:"subagent"`
+		}
+		if json.Unmarshal(source, &src) == nil && src.Subagent != nil {
+			if src.Subagent.ThreadSpawn != nil {
+				parent = src.Subagent.ThreadSpawn.ParentThreadID
+			}
+			return true, parent
+		}
+	}
+	return strings.EqualFold(threadSource, "subagent"), parent
 }
 
 func sessionID(path string) string {

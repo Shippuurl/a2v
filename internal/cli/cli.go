@@ -214,7 +214,93 @@ func newModelsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&aliases, "aliases", false, "同时列出别名")
+	cmd.AddCommand(newModelsRmCmd(), newModelsPruneCmd())
 	return cmd
+}
+
+func newModelsRmCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rm <id|alias>...",
+		Short: "从目录里删除模型（历史模型和授权模型都会删）",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			for _, arg := range args {
+				id := cfg.Resolve(arg)
+				if !dropModel(cfg, id) {
+					fmt.Printf("  没有 %s\n", arg)
+					continue
+				}
+				fmt.Printf("  已删除 %s\n", id)
+			}
+			if cfg.Model != "" {
+				found := false
+				for _, m := range cfg.Models {
+					if m.ID == cfg.Model {
+						found = true
+					}
+				}
+				if !found {
+					cfg.Model = ""
+				}
+			}
+			return cfg.Save()
+		},
+	}
+}
+
+// dropModel removes id from the history catalogue and every proxy's list.
+func dropModel(cfg *config.Config, id string) bool {
+	found := false
+	out := cfg.Models[:0]
+	for _, m := range cfg.Models {
+		if m.ID == id {
+			found = true
+			continue
+		}
+		out = append(out, m)
+	}
+	cfg.Models = out
+	for i := range cfg.Proxies {
+		if len(cfg.Proxies[i].Models) == 0 {
+			continue
+		}
+		keep := cfg.Proxies[i].Models[:0]
+		for _, m := range cfg.Proxies[i].Models {
+			if m.ID != id {
+				keep = append(keep, m)
+			}
+		}
+		cfg.Proxies[i].Models = keep
+	}
+	return found
+}
+
+func newModelsPruneCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "prune",
+		Short: "删掉当前 key 未授权的历史模型",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			p := cfg.Proxy()
+			if p == nil || len(p.Models) == 0 {
+				return fmt.Errorf("当前代理还没有授权列表，先 a2v sync")
+			}
+			before := len(cfg.Models)
+			cfg.Models = config.PruneTo(cfg.Models, p.Models)
+			if err := cfg.Save(); err != nil {
+				return err
+			}
+			fmt.Printf("删除历史模型 %d 个，剩余 %d 个\n", before-len(cfg.Models), len(cfg.Models))
+			return nil
+		},
+	}
 }
 
 // ---------------------------------------------------------------- run
@@ -455,11 +541,16 @@ func maxInt(a, b int) int {
 
 func newSessionsCmd() *cobra.Command {
 	var limit int
+	var all bool
 	cmd := &cobra.Command{
 		Use:   "sessions",
-		Short: "列出可恢复的 codex 会话",
+		Short: "列出可恢复的 codex 会话（默认排除子代理）",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			list, err := codex.Recent(limit)
+			fetch := codex.Recent
+			if all {
+				fetch = codex.RecentAll
+			}
+			list, err := fetch(limit)
 			if err != nil {
 				return err
 			}
@@ -467,14 +558,26 @@ func newSessionsCmd() *cobra.Command {
 				fmt.Println("(空)")
 				return nil
 			}
-			for _, s := range list {
-				fmt.Printf("  %s  %-18s %s\n      %s\n", s.Time.Format("01-02 15:04"), s.Model, s.ID, s.Title)
+			for _, st := range list {
+				model := st.Model
+				if len(model) > 18 {
+					model = model[:17] + "…"
+				}
+				tag := ""
+				if st.Subagent {
+					tag = "  子代理"
+				}
+				fmt.Printf("  %s  %-18s %s%s\n      %s\n", st.Time.Format("01-02 15:04"), model, st.ID, tag, st.Title)
 			}
-			fmt.Println("\n恢复：a2v resume <id>")
+			if !all {
+				fmt.Println("\n子代理会话已排除；a2v sessions --all 可查看")
+			}
+			fmt.Println("恢复：a2v resume <id>")
 			return nil
 		},
 	}
 	cmd.Flags().IntVarP(&limit, "limit", "n", 15, "显示条数")
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "包含子代理（subagent）会话")
 	return cmd
 }
 

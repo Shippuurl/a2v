@@ -38,11 +38,13 @@ Linux / macOS，amd64 / arm64。脚本只做三件事：认平台、下二进制
 a2v                     # 交互菜单
 a2v sol                 # 用别名/模型 id 直接启动
 a2v run gpt-6-astra -- --full-auto   # 参数透传给 codex
-a2v proxy list          # 代理：list / use / add / rm
+a2v proxy list          # 代理：list / use / add / rm <id>
 a2v key sk-xxx          # 写 key，并同步 ~/.codex/auth.json
 a2v sync                # 按当前 key 拉取授权模型（--prune 清理历史）
+a2v models rm <id>      # 删除目录里的模型（历史/授权都删）
+a2v models prune        # 一次删掉当前 key 未授权的历史模型
 a2v pin gpt-6-astra     # 当前目录固定模型（写 ./.a2v.json，- 清除）
-a2v sessions            # 最近会话
+a2v sessions            # 最近会话（默认排除子代理；--all 含子代理）
 a2v resume <session-id> # 用当前模型恢复会话
 a2v doctor              # 体检
 a2v update              # 自更新
@@ -72,10 +74,18 @@ a2v update              # 自更新
 | `p` | 代理列表 / 新增 |
 | `ctrl+k` | 设置 API Key |
 | `r` | 恢复会话 |
+| `a` | 会话页：显示 / 隐藏子代理会话 |
+| `d` | 删除选中的模型或代理（`y` 确认） |
 | `s` | 重新拉取模型（按 key 授权） |
 | `t` | 展开 / 折叠未授权的历史模型 |
 | `?` | 帮助 |
 | `q` | 退出 |
+
+### 子代理会话
+
+codex 会给子代理线程写 `thread_source: "subagent"`，并在 `source` 里记 `parent_thread_id`。
+`a2v` 默认把这类会话从恢复列表里滤掉（本机 124 个 rollout 里有 16 个是子代理），
+`a` 键或 `a2v sessions --all` 可以把它们放回来，行尾标「子代理」。
 
 ## 文件
 
