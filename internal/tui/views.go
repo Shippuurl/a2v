@@ -183,8 +183,8 @@ func (m *App) modelRow(i int, mo config.Model, w, aliasW int) string {
 func (m *App) emptyState(w int) string {
 	var b strings.Builder
 	b.WriteString("  " + style(subtle).Render("还没有模型目录。") + "\n\n")
-	b.WriteString("  " + style(faint).Render("按 ") + style(accent).Render("p") + style(faint).Render(" 添加代理，再按 ") +
-		style(accent).Render("s") + style(faint).Render(" 从代理拉取模型列表。") + "\n")
+	b.WriteString("  " + style(faint).Render("先按 ") + style(accent).Render("p") + style(faint).Render(" 加一个中转（名字 / URL / Key），再按 ") +
+		style(accent).Render("s") + style(faint).Render(" 拉模型。") + "\n")
 	b.WriteString("  " + style(faint).Render("也可以直接编辑 ") + style(subtle).Render("~/.config/a2v/config.json") + "\n")
 	return b.String()
 }

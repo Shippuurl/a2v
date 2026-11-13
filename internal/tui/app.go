@@ -139,6 +139,15 @@ func New(o Options) *App {
 	m.spin.Style = style(iris)
 
 	m.refresh()
+
+	// First run: no relay yet, so open the add-proxy form instead of showing
+	// an empty model list that the user has no idea what to do with.
+	if len(m.cfg.Proxies) == 0 {
+		m.screen = scrAddProxy
+		m.formFocus = 0
+		m.form[0].Focus()
+	}
+
 	// Start on the pinned / configured model.
 	target := m.cfg.Model
 	if m.pin != nil && m.pin.Model != "" {
@@ -155,6 +164,9 @@ func New(o Options) *App {
 }
 
 func (m *App) Init() tea.Cmd {
+	if m.screen == scrAddProxy {
+		return tea.Batch(tickCmd(), textinput.Blink)
+	}
 	return tickCmd()
 }
 
@@ -619,10 +631,23 @@ func (m *App) submitProxy() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.setStatus("已添加代理 "+p.Name, false)
-	m.screen = scrProxies
 	m.pCursor = len(m.cfg.Proxies) - 1
 	for i := range m.form {
 		m.form[i].Blur()
+	}
+
+	// First relay: go straight to pulling its catalogue so the menu is not
+	// empty after the very first thing the user did.
+	if len(m.cfg.Models) == 0 && p.Key != "" {
+		m.screen = scrModels
+		m.loading = true
+		return m, tea.Batch(m.spin.Tick, syncModels(p))
+	}
+	m.screen = scrProxies
+	if p.Key == "" {
+		m.setStatus("已添加代理 "+p.Name+"；按 s 拉模型前先补 key（ctrl+k）", false)
+	} else {
+		m.setStatus("已添加代理 "+p.Name+"；按 s 拉模型", false)
 	}
 	return m, nil
 }

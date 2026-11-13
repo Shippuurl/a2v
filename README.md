@@ -103,8 +103,8 @@ codex 会给子代理线程写 `thread_source: "subagent"`，并在 `source` 里
   "version": 1,
   "model": "gpt-5.6-sol",
   "flags": "--dangerously-skip-permissions",
-  "active_proxy": "new8w8",
-  "proxies": [{"id":"new8w8","name":"new8w8","url":"https://new.8w8.shop","key":"sk-..."}],
+  "active_proxy": "my-relay",
+  "proxies": [{"id":"my-relay","name":"My Relay","url":"https://relay.example.com","key":"sk-..."}],
   "models": [{"id":"gpt-5.6-sol","name":"GPT 5.6 Sol","desc":"GPT 代码"}],
   "aliases": {"sol":"gpt-5.6-sol","terra":"gpt-5.6-terra"},
   "recent": ["gpt-6-astra"]
