@@ -60,10 +60,14 @@ a2v pin gpt-6-astra     # 当前目录固定模型（写 ./.a2v.json，- 清除�
 a2v sessions            # 最近会话（默认排除子代理；--all 含子代理）
 a2v resume <session-id> # 用当前模型恢复会话
 a2v doctor              # 体检
+a2v banner              # 打印启动 banner（--full 宽版）
 a2v update              # 自更新
 ```
 
 非交互环境（没有 TTY）自动退化成编号菜单，`echo 3 | a2v` 也能用。
+
+启动时先显示 9×74 的品牌 banner（80 列终端即可），900ms 或任意键进入主界面；
+窄终端自动跳过。`--no-splash` 或 `A2V_NO_SPLASH=1` 可关闭。
 
 ## 模型列表 = 当前 key 的授权列表
 

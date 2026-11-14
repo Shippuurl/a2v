@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ type Options struct {
 	LocalPin *config.Local
 	LocalAt  string
 	DryRun   bool
+	NoSplash bool
 }
 
 // App is the root bubbletea model.
@@ -96,6 +98,9 @@ type App struct {
 	showSubagents bool
 
 	confirm *confirmState
+
+	splash      bool
+	splashUntil time.Time
 }
 
 // confirmState is a pending destructive action awaiting y/n.
@@ -108,6 +113,7 @@ type confirmState struct {
 // New builds the app.
 func New(o Options) *App {
 	m := &App{cfg: o.Config, cwd: o.Dir, pin: o.LocalPin, pinPath: o.LocalAt, dryRun: o.DryRun}
+	m.splash = !o.NoSplash && os.Getenv("A2V_NO_SPLASH") == ""
 
 	m.search = textinput.New()
 	m.search.Placeholder = "输入关键词筛选模型"
@@ -183,10 +189,20 @@ func (m *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tickMsg:
 		m.frame++
+		if m.splash && !m.splashUntil.IsZero() && time.Now().After(m.splashUntil) {
+			m.splash = false
+		}
 		return m, tickCmd()
 
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
+		if m.splash {
+			if msg.Width < BannerWidth()+4 || msg.Height < len(compactBanner)+8 {
+				m.splash = false
+			} else if m.splashUntil.IsZero() {
+				m.splashUntil = time.Now().Add(900 * time.Millisecond)
+			}
+		}
 		if !m.centered {
 			m.offset = m.cursor - (m.h-m.chrome())/2
 			m.centered = true
@@ -271,6 +287,11 @@ func (m *App) onKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if s == "ctrl+c" {
 		m.quit = true
 		return m, tea.Quit
+	}
+
+	if m.splash {
+		m.splash = false
+		return m, nil
 	}
 
 	if m.confirm != nil {

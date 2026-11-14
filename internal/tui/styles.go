@@ -176,3 +176,39 @@ func badge(s string) string {
 		Padding(0, 1).
 		Render(s)
 }
+
+// metalLine paints one banner row as brushed metal with a light band sweeping
+// across it. colBase lets the band travel diagonally instead of vertically
+// aligned per row.
+func metalLine(line string, row int, phase float64, totalW int) string {
+	if totalW <= 0 {
+		totalW = 1
+	}
+	base := rgb{0.16, 0.20, 0.26} // dark steel
+	head := math.Mod(phase+float64(row)*0.03, 1.0) * 1.5
+	var b strings.Builder
+	col := 0
+	for _, r := range line {
+		if r == ' ' {
+			b.WriteRune(' ')
+			col++
+			continue
+		}
+		x := float64(col) / float64(totalW)
+		d := math.Abs(x - (head - 0.25))
+		glow := math.Exp(-d * d / 0.006)
+		c := base.mix(sample(x*0.55+0.05), 0.28+0.72*math.Min(1, glow))
+		b.WriteString(style(lipgloss.Color(c.hex())).Render(string(r)))
+		col++
+	}
+	return b.String()
+}
+
+// center pads s with spaces so it sits in the middle of w cells.
+func center(s string, w int) string {
+	gap := w - lipgloss.Width(s)
+	if gap <= 0 {
+		return " " + s
+	}
+	return strings.Repeat(" ", gap/2) + s
+}

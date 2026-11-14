@@ -36,7 +36,29 @@ func (m *App) width() int {
 	return w
 }
 
+// viewSplash is the launch screen: the brand banner, a metallic sweep, and a
+// one-line hint. Any key (or 900ms) moves on.
+func (m *App) viewSplash() string {
+	w := m.width()
+	art := renderArt(compactBanner, m.phase())
+	var b strings.Builder
+	pad := (m.h - len(art) - 6) / 2
+	if pad > 0 {
+		b.WriteString(strings.Repeat("\n", pad))
+	}
+	for _, line := range art {
+		b.WriteString(center(line, w) + "\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(center(gradient("a2vec · codex launcher", m.phase()*0.7), w) + "\n")
+	b.WriteString(center(style(faint).Render("按任意键继续  ·  "+version.Version), w) + "\n")
+	return b.String()
+}
+
 func (m *App) View() string {
+	if m.splash {
+		return m.viewSplash()
+	}
 	if m.w > 0 && (m.w < 34 || m.h < 10) {
 		return "\n  " + style(warn).Render("窗口太小") + style(faint).Render(" 请放大终端 (需要 ≥ 34×10)") + "\n"
 	}

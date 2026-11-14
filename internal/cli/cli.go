@@ -29,7 +29,10 @@ import (
 	"github.com/Shippuurl/a2v/internal/version"
 )
 
-var dryRun bool
+var (
+	dryRun   bool
+	noSplash bool
+)
 
 // Execute runs the CLI.
 func Execute() error {
@@ -48,6 +51,7 @@ func newRoot() *cobra.Command {
 		RunE:          runRoot,
 	}
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "只打印将要执行的 codex 命令，不启动")
+	root.PersistentFlags().BoolVar(&noSplash, "no-splash", false, "跳过启动 banner（同 A2V_NO_SPLASH=1）")
 	root.SetVersionTemplate("a2v {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
 
@@ -63,6 +67,7 @@ func newRoot() *cobra.Command {
 		newDoctorCmd(),
 		newUpdateCmd(),
 		newVersionCmd(),
+		newBannerCmd(),
 	)
 	return root
 }
@@ -83,7 +88,7 @@ func runRoot(_ *cobra.Command, args []string) error {
 	if !isTTY() {
 		return fallbackMenu(cfg, pin)
 	}
-	return tui.Run(tui.Options{Config: cfg, Dir: cwd, LocalPin: pin, LocalAt: pinPath, DryRun: dryRun})
+	return tui.Run(tui.Options{Config: cfg, Dir: cwd, LocalPin: pin, LocalAt: pinPath, DryRun: dryRun, NoSplash: noSplash})
 }
 
 // launch hands the terminal to codex.
@@ -897,6 +902,28 @@ func download(url, want string) (string, error) {
 		return "", fmt.Errorf("替换 %s 失败: %w", self, err)
 	}
 	return sum, nil
+}
+
+func newBannerCmd() *cobra.Command {
+	var full bool
+	cmd := &cobra.Command{
+		Use:   "banner",
+		Short: "打印 a2vec 启动 banner（--full 用宽版）",
+		Run: func(*cobra.Command, []string) {
+			switch {
+			case full && isTTY():
+				fmt.Println(tui.BannerFull(0.35))
+			case full:
+				fmt.Println(tui.BannerFull(0))
+			case isTTY():
+				fmt.Println(tui.BannerColored(0.35))
+			default:
+				fmt.Println(tui.BannerText())
+			}
+		},
+	}
+	cmd.Flags().BoolVar(&full, "full", false, "打印 11×91 的宽版 banner")
+	return cmd
 }
 
 func newVersionCmd() *cobra.Command {
