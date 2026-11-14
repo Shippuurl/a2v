@@ -26,7 +26,13 @@
 curl -fsSL https://tool.kervein.club/a2v/install.sh | bash
 ```
 
-Windows（PowerShell 5.1 / 7）：
+Windows（cmd 或 PowerShell 都能直接用）：
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://tool.kervein.club/a2v/install.ps1 | iex"
+```
+
+已经在 PowerShell 里的话，也可以短一点：
 
 ```powershell
 irm https://tool.kervein.club/a2v/install.ps1 | iex
