@@ -48,13 +48,13 @@
   .lede code{font-family:var(--mono);font-size:.92em;color:var(--ink);background:#141a24;padding:1px 6px;border-radius:5px}
 
   .install{
-    display:flex;align-items:center;gap:12px;
+    display:flex;align-items:flex-start;gap:12px;
     background:linear-gradient(180deg,#11161f,#0c1017);
     border:1px solid var(--line);border-radius:12px;padding:14px 16px;
-    font-family:var(--mono);font-size:14px;overflow:auto;
+    font-family:var(--mono);font-size:14px;overflow:hidden;
   }
-  .install .p{color:var(--teal);user-select:none}
-  .install code{white-space:nowrap}
+  .install .p{color:var(--teal);user-select:none;flex:none;line-height:1.55}
+  .install code{flex:1;min-width:0;display:block;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
   .copy{
     margin-left:auto;flex:none;border:1px solid var(--line);background:#151b26;color:var(--muted);
     font:12px/1 var(--mono);padding:8px 10px;border-radius:7px;cursor:pointer;transition:.15s;
