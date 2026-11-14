@@ -21,11 +21,13 @@ for f in "$SRC"/dist/a2v-* "$SRC"/dist/latest.json; do
 done
 python3 "$ECS" put "$SRC/install.sh" "$REMOTE_DIR/install.sh" >/dev/null
 echo "  ↑ install.sh"
+python3 "$ECS" put "$SRC/install.ps1" "$REMOTE_DIR/install.ps1" >/dev/null
+echo "  ↑ install.ps1"
 python3 "$ECS" put "$SRC/index.html" "$REMOTE_DIR/index.html" >/dev/null
 echo "  ↑ index.html"
 [ -f "$SRC/README.md" ] && python3 "$ECS" put "$SRC/README.md" "$REMOTE_DIR/README.md" >/dev/null && echo "  ↑ README.md"
 
-python3 "$ECS" run "chmod 755 $REMOTE_DIR/a2v-*; chmod 644 $REMOTE_DIR/*.sha256 $REMOTE_DIR/latest.json $REMOTE_DIR/install.sh $REMOTE_DIR/index.html; ls -lh $REMOTE_DIR | tail -n +2" | tail -12
+python3 "$ECS" run "chmod 755 $REMOTE_DIR/a2v-*; chmod 644 $REMOTE_DIR/*.sha256 $REMOTE_DIR/latest.json $REMOTE_DIR/install.sh $REMOTE_DIR/install.ps1 $REMOTE_DIR/index.html $REMOTE_DIR/README.md; ls -lh $REMOTE_DIR | tail -n +2" | tail -16
 
 echo "==> 验收"
 sleep 2

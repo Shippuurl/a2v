@@ -113,9 +113,16 @@
   <div class="install">
     <span class="p">$</span>
     <code id="cmd">curl -fsSL https://tool.kervein.club/a2v/install.sh | bash</code>
-    <button class="copy" id="copy">复制</button>
+    <button class="copy" data-target="cmd">复制</button>
   </div>
-  <p class="alts"><span>Linux / macOS · amd64 / arm64 · 安装前自动校验 sha256</span><br>
+  <p class="alts"><span>Linux / macOS · amd64 / arm64 · 安装前自动校验 sha256</span></p>
+
+  <div class="install">
+    <span class="p">PS&gt;</span>
+    <code id="cmd-ps">irm https://tool.kervein.club/a2v/install.ps1 | iex</code>
+    <button class="copy" data-target="cmd-ps">复制</button>
+  </div>
+  <p class="alts"><span>Windows 10/11 · PowerShell 5.1 或 7 · 装到 %LOCALAPPDATA%\a2v</span><br>
     <span>内置中转 new.8w8.shop（不带 key），装上后粘自己的 API Key 即可</span></p>
 
   <div class="grid">
@@ -178,16 +185,16 @@
 
 <div class="toast" id="toast">已复制</div>
 <script>
-  const btn = document.getElementById('copy');
   const toast = document.getElementById('toast');
-  btn.addEventListener('click', async () => {
-    const text = document.getElementById('cmd').textContent.trim();
+  document.querySelectorAll('.copy').forEach(btn => btn.addEventListener('click', async () => {
+    const el = document.getElementById(btn.dataset.target);
+    const text = el.textContent.trim();
     try { await navigator.clipboard.writeText(text); }
     catch { const r = document.createRange(); r.selectNode(document.getElementById('cmd'));
             getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
     toast.classList.add('on');
     setTimeout(() => toast.classList.remove('on'), 1200);
-  });
+  }));
 </script>
 </body>
 </html>

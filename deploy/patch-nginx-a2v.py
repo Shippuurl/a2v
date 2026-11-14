@@ -27,6 +27,7 @@ BLOCK = f"""
         add_header Cache-Control "no-cache" always;
         include /etc/nginx/snippets/a2vec-security.conf;
         location ~ \\.sh$ {{ default_type text/plain; charset utf-8; }}
+        location ~ \.ps1$ {{ default_type text/plain; charset utf-8; }}
         location ~ \\.json$ {{ default_type application/json; charset utf-8; }}
         location ~ \\.html$ {{ default_type text/html; charset utf-8; }}
         location ~ \\.md$ {{ default_type text/plain; charset utf-8; }}

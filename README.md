@@ -26,6 +26,15 @@
 curl -fsSL https://tool.kervein.club/a2v/install.sh | bash
 ```
 
+Windows（PowerShell 5.1 / 7）：
+
+```powershell
+irm https://tool.kervein.club/a2v/install.ps1 | iex
+```
+
+装到 `%LOCALAPPDATA%\a2v\a2v.exe` 并写进用户 PATH（新开终端生效）；
+自定义目录用 `$env:A2V_DIR='D:\bin'; irm ... | iex`。
+
 源码：[github.com/Shippuurl/a2v](https://github.com/Shippuurl/a2v)
 
 Linux / macOS，amd64 / arm64。脚本只做三件事：认平台、下二进制、按 `sha256` 校验后放进 `PATH`（优先 `/usr/local/bin`，其次 `~/.local/bin`）。
@@ -163,7 +172,7 @@ a2v 每次启动前读一遍 `codex --help`，按**当前装的那个 codex** �
 ## 开发与发布
 
 ```bash
-./build.sh                 # 交叉编译 + sha256 + latest.json
+./build.sh                 # linux/darwin/windows × amd64/arm64 + sha256 + latest.json
 VERSION=v1.1.0 ./build.sh  # 指定版本
 ```
 

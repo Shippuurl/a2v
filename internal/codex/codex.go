@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -33,11 +34,16 @@ func Bin() (string, error) {
 		return p, nil
 	}
 	home, _ := os.UserHomeDir()
-	for _, p := range []string{
+	candidates := []string{
 		filepath.Join(home, ".local", "bin", "codex"),
 		"/usr/local/bin/codex",
 		"/opt/homebrew/bin/codex",
-	} {
+	}
+	if runtime.GOOS == "windows" {
+		candidates = windowsCandidates()
+		candidates = append(candidates, filepath.Join(home, ".local", "bin", "codex.exe"))
+	}
+	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
@@ -120,7 +126,7 @@ func HelpText() string {
 				if err != nil {
 					return ""
 				}
-				out, err := exec.Command(bin, "--help").Output()
+				out, err := command(bin, "--help").Output()
 				if err != nil {
 					return ""
 				}
@@ -241,7 +247,7 @@ func (s Spec) Exec() error {
 			return err
 		}
 	}
-	cmd := exec.Command(bin, args...)
+	cmd := command(bin, args...)
 	cmd.Env = append(os.Environ(), s.Env()...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -255,7 +261,7 @@ func (s Spec) Cmd() (*exec.Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(bin, s.Args()...)
+	cmd := command(bin, s.Args()...)
 	cmd.Env = append(os.Environ(), s.Env()...)
 	cmd.Dir = s.Dir
 	return cmd, nil

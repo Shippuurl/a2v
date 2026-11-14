@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/Shippuurl/a2v/internal/codex"
 	"github.com/Shippuurl/a2v/internal/config"
@@ -685,8 +685,7 @@ func newDoctorCmd() *cobra.Command {
 				line(false, "codex", err.Error())
 			} else {
 				line(true, "codex", bin)
-				if out, e := exec.Command(bin, "--version").Output(); e == nil {
-					ver := strings.TrimSpace(string(out))
+				if ver := codex.Version(); ver != "" {
 					caps := []string{}
 					if codex.Supports("resume") {
 						caps = append(caps, "resume")
@@ -880,6 +879,20 @@ func download(url, want string) (string, error) {
 	if err := os.Chmod(tmpName, 0o755); err != nil {
 		return "", err
 	}
+	if runtime.GOOS == "windows" {
+		// A running .exe cannot be overwritten, but it can be renamed.
+		old := self + ".old"
+		_ = os.Remove(old)
+		if err := os.Rename(self, old); err != nil {
+			return "", fmt.Errorf("替换 %s 失败: %w", self, err)
+		}
+		if err := os.Rename(tmpName, self); err != nil {
+			_ = os.Rename(old, self)
+			return "", fmt.Errorf("替换 %s 失败: %w", self, err)
+		}
+		_ = os.Remove(old) // best effort; may still be locked
+		return sum, nil
+	}
 	if err := os.Rename(tmpName, self); err != nil {
 		return "", fmt.Errorf("替换 %s 失败: %w", self, err)
 	}
@@ -897,21 +910,19 @@ func newVersionCmd() *cobra.Command {
 }
 
 // promptSecret reads a key with echo disabled so it never lands on screen,
-// in scrollback, or in the shell's history.
+// in scrollback, or in the shell's history. x/term handles both Unix and the
+// Windows console.
 func promptSecret() (string, error) {
 	fmt.Fprint(os.Stderr, "API Key（输入不回显，回车确认）: ")
-	echoOff := exec.Command("stty", "-echo")
-	echoOff.Stdin = os.Stdin
-	hidden := echoOff.Run() == nil
-	if hidden {
-		defer func() {
-			on := exec.Command("stty", "echo")
-			on.Stdin = os.Stdin
-			_ = on.Run()
-		}()
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		b, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(os.Stderr)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(b)), nil
 	}
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	fmt.Fprintln(os.Stderr)
 	if err != nil && strings.TrimSpace(line) == "" {
 		return "", err
 	}

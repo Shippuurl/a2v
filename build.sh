@@ -11,20 +11,22 @@ export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 mkdir -p dist
 rm -f dist/a2v-* dist/latest.json
 
-TARGETS="${TARGETS:-linux/amd64 linux/arm64 darwin/amd64 darwin/arm64}"
+TARGETS="${TARGETS:-linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64}"
 
 echo "==> a2v $VERSION"
 for t in $TARGETS; do
     os="${t%/*}"; arch="${t#*/}"
-    out="dist/a2v-$os-$arch"
+    ext=""
+    [ "$os" = "windows" ] && ext=".exe"
+    out="dist/a2v-$os-$arch$ext"
     echo "  build $out"
     GOOS="$os" GOARCH="$arch" go build -trimpath -buildvcs=false \
         -ldflags "-s -w -X github.com/Shippuurl/a2v/internal/version.Version=$VERSION" \
         -o "$out" ./cmd/a2v
     if command -v sha256sum >/dev/null 2>&1; then
-        (cd dist && sha256sum "a2v-$os-$arch" > "a2v-$os-$arch.sha256")
+        (cd dist && sha256sum "a2v-$os-$arch$ext" > "a2v-$os-$arch$ext.sha256")
     else
-        (cd dist && shasum -a 256 "a2v-$os-$arch" > "a2v-$os-$arch.sha256")
+        (cd dist && shasum -a 256 "a2v-$os-$arch$ext" > "a2v-$os-$arch$ext.sha256")
     fi
 done
 
@@ -38,7 +40,7 @@ for name in sorted(os.listdir("dist")):
         continue
     if name.endswith(".sha256"):
         continue
-    key = name[len("a2v-"):]
+    key = name[len("a2v-"):].removesuffix(".exe")
     p = os.path.join("dist", name)
     h = hashlib.sha256(open(p, "rb").read()).hexdigest()
     sha[key] = h
