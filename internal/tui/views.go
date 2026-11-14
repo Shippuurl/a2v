@@ -15,6 +15,9 @@ import (
 
 // chrome is the number of rows the frame (header + footer) occupies.
 func (m *App) chrome() int {
+	if m.bannerOn() {
+		return len(compactBanner) + 6
+	}
 	return 9
 }
 
@@ -36,29 +39,14 @@ func (m *App) width() int {
 	return w
 }
 
-// viewSplash is the launch screen: the brand banner, a metallic sweep, and a
-// one-line hint. Any key (or 900ms) moves on.
-func (m *App) viewSplash() string {
-	w := m.width()
-	art := renderArt(compactBanner, m.phase())
-	var b strings.Builder
-	pad := (m.h - len(art) - 6) / 2
-	if pad > 0 {
-		b.WriteString(strings.Repeat("\n", pad))
-	}
-	for _, line := range art {
-		b.WriteString(center(line, w) + "\n")
-	}
-	b.WriteString("\n")
-	b.WriteString(center(gradient("a2vec · codex launcher", m.phase()*0.7), w) + "\n")
-	b.WriteString(center(style(faint).Render("按任意键继续  ·  "+version.Version), w) + "\n")
-	return b.String()
+// bannerOn reports whether the wordmark fits as a permanent header. Below
+// this size it would leave no room for the model list, so the compact
+// one-liner takes over.
+func (m *App) bannerOn() bool {
+	return !m.noBanner && m.w >= BannerWidth()+2 && m.h >= len(compactBanner)+11
 }
 
 func (m *App) View() string {
-	if m.splash {
-		return m.viewSplash()
-	}
 	if m.w > 0 && (m.w < 34 || m.h < 10) {
 		return "\n  " + style(warn).Render("窗口太小") + style(faint).Render(" 请放大终端 (需要 ≥ 34×10)") + "\n"
 	}
@@ -66,8 +54,15 @@ func (m *App) View() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString("  " + logo(m.phase(), "a2vec · codex launcher") + "\n")
-	b.WriteString("  " + shimmer(cw-2, m.phase()*0.6, faint) + "\n")
+	if m.bannerOn() {
+		for _, line := range renderArt(compactBanner, m.phase()) {
+			b.WriteString(center(line, cw) + "\n")
+		}
+		b.WriteString("\n")
+	} else {
+		b.WriteString("  " + logo(m.phase(), "a2vec · codex launcher") + "\n")
+		b.WriteString("  " + shimmer(cw-2, m.phase()*0.6, faint) + "\n")
+	}
 	b.WriteString("  " + m.metaLine(cw-2) + "\n")
 	b.WriteString("\n")
 
@@ -86,15 +81,23 @@ func (m *App) View() string {
 		b.WriteString(m.viewModels(cw - 2))
 	}
 
-	b.WriteString("\n")
+	// Keep the footer pinned to the bottom edge, so a tall banner still reads
+	// as a frame instead of content floating at the top.
+	footer := ""
 	if m.confirm != nil {
-		b.WriteString("  " + style(warn).Bold(true).Render("⚠ "+m.confirm.prompt) +
-			style(faint).Render("   y 确认 · n 取消") + "\n")
+		footer += "  " + style(warn).Bold(true).Render("⚠ "+m.confirm.prompt) +
+			style(faint).Render("   y 确认 · n 取消") + "\n"
 	}
 	if s := m.statusLine(cw - 2); s != "" {
-		b.WriteString("  " + s + "\n")
+		footer += "  " + s + "\n"
 	}
-	b.WriteString("  " + m.footer(cw-2) + "\n")
+	footer += "  " + m.footer(cw-2) + "\n"
+
+	used := strings.Count(b.String(), "\n")
+	if pad := m.h - used - strings.Count(footer, "\n"); pad > 0 {
+		b.WriteString(strings.Repeat("\n", pad))
+	}
+	b.WriteString(footer)
 	return b.String()
 }
 

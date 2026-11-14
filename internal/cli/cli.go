@@ -51,7 +51,9 @@ func newRoot() *cobra.Command {
 		RunE:          runRoot,
 	}
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "只打印将要执行的 codex 命令，不启动")
-	root.PersistentFlags().BoolVar(&noSplash, "no-splash", false, "跳过启动 banner（同 A2V_NO_SPLASH=1）")
+	root.PersistentFlags().BoolVar(&noSplash, "no-banner", false, "用紧凑头部代替常驻 banner（同 A2V_NO_BANNER=1）")
+	root.PersistentFlags().BoolVar(&noSplash, "no-splash", false, "（旧名，等同 --no-banner）")
+	_ = root.PersistentFlags().MarkHidden("no-splash")
 	root.SetVersionTemplate("a2v {{.Version}}\n")
 	root.CompletionOptions.DisableDefaultCmd = true
 
@@ -88,7 +90,7 @@ func runRoot(_ *cobra.Command, args []string) error {
 	if !isTTY() {
 		return fallbackMenu(cfg, pin)
 	}
-	return tui.Run(tui.Options{Config: cfg, Dir: cwd, LocalPin: pin, LocalAt: pinPath, DryRun: dryRun, NoSplash: noSplash})
+	return tui.Run(tui.Options{Config: cfg, Dir: cwd, LocalPin: pin, LocalAt: pinPath, DryRun: dryRun, NoBanner: noSplash})
 }
 
 // launch hands the terminal to codex.
